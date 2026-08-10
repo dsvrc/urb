@@ -1,0 +1,62 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Akman"
+  given-names: "Ahmet Onur"
+  orcid: "https://orcid.org/0009-0006-4461-5025"
+- family-names: "Psarou"
+  given-names: "Anastasia"
+  orcid: "https://orcid.org/0009-0008-3314-4429"
+- family-names: "Hoffmann"
+  given-names: "Michał"
+  orcid: "https://orcid.org/0009-0003-5157-1807"
+- family-names: "Gorczyca"
+  given-names: "Łukasz"
+  orcid: "https://orcid.org/0009-0009-7381-0251"
+- family-names: "Kowalski"
+  given-names: "Łukasz"
+  orcid: "https://orcid.org/0009-0007-1319-9791"
+- family-names: "Gora"
+  given-names: "Paweł"
+  orcid: "https://orcid.org/0000-0002-8037-5704"
+- family-names: "Jamróz"
+  given-names: "Grzegorz"
+  orcid: "https://orcid.org/0009-0004-7451-1484"
+- family-names: "Kucharski"
+  given-names: "Rafał"
+  orcid: "https://orcid.org/0000-0002-9767-8883"
+title: "URB"
+version: 1.1.0
+date-released: 2025-05-15
+url: "https://github.com/COeXISTENCE-PROJECT/URB"
+preferred-citation:
+  type: conference-paper
+  title: "URB — Urban Routing Benchmark for RL-equipped Connected Autonomous Vehicles"
+  authors:
+    - family-names: "Akman"
+      given-names: "Ahmet Onur"
+    - family-names: "Psarou"
+      given-names: "Anastasia"
+    - family-names: "Hoffmann"
+      given-names: "Michał"
+    - family-names: "Gorczyca"
+      given-names: "Łukasz"
+    - family-names: "Kowalski"
+      given-names: "Łukasz"
+    - family-names: "Gora"
+      given-names: "Paweł"
+    - family-names: "Jamróz"
+      given-names: "Grzegorz"
+    - family-names: "Kucharski"
+      given-names: "Rafał"
+  month: 12
+  year: 2025
+  collection-title: "Proceedings of the Thirty-Ninth Annual Conference on Neural Information Processing Systems (NeurIPS 2025) Datasets and Benchmarks Track"
+  bibtex: |
+    @inproceedings{URB,
+      title     = {URB -- Urban Routing Benchmark for RL-equipped Connected Autonomous Vehicles},
+      author    = {Akman, Ahmet Onur and Psarou, Anastasia and Hoffmann, Michał and Gorczyca, Łukasz and Kowalski, Łukasz and Gora, Paweł and Jamróz, Grzegorz and Kucharski, Rafał},
+      booktitle = {Proceedings of the Thirty-Ninth Annual Conference on Neural Information Processing Systems (NeurIPS 2025) Datasets and Benchmarks Track},
+      month     = {December},
+      year      = {2025}
+    }

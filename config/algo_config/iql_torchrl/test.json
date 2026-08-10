@@ -1,0 +1,19 @@
+{
+    "agent_frames_per_batch": 2,
+    "n_iters": 5,
+    "num_epochs": 1,
+    "minibatch_size": 2,
+    "lr": 0.003,
+    "max_grad_norm": 3.0,
+    "gamma": 0.99,
+    "memory_size": 1000,
+    "tau": 0.05,
+    "eps": 0.95,
+    "eps_init": 0.99,
+    "eps_end": 0.05,
+    "exploration_fraction": 0.33,
+    "share_params_agent": false,
+    "policy_network_depth": 3,
+    "policy_network_num_cells": 64,
+    "od_embedding_dim": 8
+}

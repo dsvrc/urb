@@ -1,0 +1,20 @@
+{
+    "agent_frames_per_batch": 10,
+    "n_iters": 400,
+    "num_epochs": 3,
+    "minibatch_size": 128,
+    "lr": 0.00015,
+    "max_grad_norm": 1.0,
+    "clip_epsilon": 0.2,
+    "gamma": 0.95,
+    "lmbda": 0.85,
+    "entropy_eps": 0.0005,
+    "normalize_advantage": true,
+    "policy_network_depth": 4,
+    "policy_network_num_cells": 320,
+    "critic_network_depth": 4,
+    "critic_network_num_cells": 320,
+    "share_params_agent": true,
+    "share_params_critic": true,
+    "od_embedding_dim": 8
+}

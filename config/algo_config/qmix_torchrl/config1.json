@@ -1,0 +1,19 @@
+{
+    "agent_frames_per_batch": 20,
+    "n_iters": 200,
+    "num_epochs": 2,
+    "minibatch_size": 256,
+    "lr": 0.0004,
+    "max_grad_norm": 1.0,
+    "memory_size": 30000,
+    "tau": 0.01,
+    "gamma": 0.95,
+    "mlp_depth": 4,
+    "mlp_cells": 256,
+    "eps_greedy_init": 1.0,
+    "eps_greedy_end": 0.1,
+    "mixing_embed_dim": 192,
+    "exploration_fraction": 0.6,
+    "share_params_agent": true,
+    "od_embedding_dim": 8
+}

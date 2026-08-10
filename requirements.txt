@@ -1,0 +1,11 @@
+routerl==2.0.0
+janux==1.1.0
+path-clustering @ git+https://github.com/Blato122/path-clustering.git@v1.1.0
+matplotlib>=3.9.3
+numpy>=2.0.2
+pandas>=2.2.3
+pytest>=9.0.0
+tensordict==0.7.0
+torch>=2.6.0,<2.7.0
+torchrl==0.7.0
+tqdm>=4.67.1
