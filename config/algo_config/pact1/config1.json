@@ -1,0 +1,57 @@
+{
+    "desc": [
+        "PACT-1 on base URB. No injected non-stationarity: the coupling identified",
+        "here is the city's own congestion.",
+        "Host hyperparameters are IDENTICAL to ippo/config1.json so an arm",
+        "difference cannot be an algorithm difference.",
+        "Everything under 'pact1' is a DECLARED CONSTANT or an arm switch. If you",
+        "find yourself tuning one to make a curve look better, it belongs in the",
+        "ablation table, not in this default."
+    ],
+
+    "training_eps": 4000,
+
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [64, 64],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+
+    "pact1": {
+        "rho": 0.8,
+        "forget": 0.999,
+        "p0": 10.0,
+
+        "g_max": 1.0,
+        "g_bias": 2.2,
+        "g_ema": 0.9,
+        "kappa": 1.0,
+        "confidence_gate": true,
+        "trust_mode": "learned",
+        "trust_fixed": 0.9,
+
+        "peer_scope": "all",
+        "dur_factor": 1.0,
+        "overlap_slack": 0.0,
+        "speed_bounds": [8.5, 14.0],
+        "min_class_share": 0.03,
+        "y_clip": 10.0,
+
+        "freeze_beta": null,
+        "raw_feature_obs": false,
+
+        "gate_abort": true,
+        "gate_after_episodes": 300,
+        "gate_min_fit_r2": 0.05,
+        "gate_window": 50,
+        "gate_live_after_episodes": 20,
+        "gate_cond_warn": 1000000.0,
+        "fft_rtol": 0.001,
+        "max_basis_mb": 4000.0,
+        "print_every": 25
+    }
+}
