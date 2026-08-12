@@ -370,8 +370,12 @@ def main():
     av_ids = [_aid(a.id) for a in env.machine_agents]
 
     free_flow = env.get_free_flow_times()
+    # The diagnostic trace lands in the REPO ROOT by default (pact1.debug_dir
+    # overrides), named with exp_id, so a multi-hour run can be tailed from one
+    # place and parallel arms never collide.
+    pact_cfg.setdefault("debug_dir", repo_root)
     coord = Pact1Coordinator(basis, agent_table, av_ids, free_flow, pact_cfg,
-                             run_dir=records_folder)
+                             run_dir=records_folder, exp_id=exp_id)
     coord.banner(extra=[f"exp_id     {exp_id}   net={network}   seed={env_seed}"])
     coord.check_fft_alignment(free_flow,
                               rtol=float(pact_cfg.get("fft_rtol", 1e-3)))

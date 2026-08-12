@@ -162,9 +162,32 @@ downgrade all of them to warnings.
 
 ---
 
-## Reading `results/<exp_id>/pact1_debug.csv`
+## Reading the trace
 
-One row per day. The two that matter most:
+One row per day, written to the **repo root** as `pact1_debug_<exp_id>.csv` and
+flushed every episode, so a multi-hour run can be tailed from one place and
+parallel arms never collide. Override with `pact1.debug_dir`.
+
+```bash
+python pact1/watch.py sai_pact1_0 --last 200 --baseline 3.21
+```
+
+`watch.py` reads the live file and answers the two questions separately: **is the
+method working** (`fit_r2`, liveness, conditioning, trust) and **is it winning**
+(`t_CAV` against the humans it replaced). Keeping them apart matters — the method
+can work perfectly and still not win, which is a statement about how much headroom
+routing has in this city, not a bug.
+
+**The winning criterion is URB's own.** A run is "won" when the CAV fleet is on
+average faster than the human drivers it replaced, i.e. `cav_adv = t_HDV / t_CAV >
+1`. That is config-independent, which is what makes it the honest read when your
+task config differs from the published table. `tt_cav` is in RouteRL's own units,
+so it is directly comparable to the `t_CAV` column of URB's results table — but
+compare against **your own baseline run with a matched `--task-conf`**, never
+against the published numbers, which used a task config this distribution does not
+ship.
+
+The two columns that matter most:
 
 | column | question | healthy |
 |---|---|---|
@@ -184,7 +207,10 @@ the two apart is what stops a bad number being blamed on the wrong thing.
 | `x_local/collector/arterial`, `x_std` | excitation — the liveness signal |
 | **`trust_pol`** vs **`trust_app`** | policy-set vs applied (= × confidence). **Report separately** (§III.11): if `trust_pol` never moves, trust was well-initialised, not learned — say so. |
 | `shift_absmean` | how hard the model is actually steering |
-| `tt_cav`, `tt_hdv`, `reward`, `excess_mean` | where the return is |
+| **`tt_cav`**, `tt_hdv` | mean AV / human travel time, in URB's own units |
+| **`cav_adv`** | `t_HDV / t_CAV`. **> 1 = won**, by URB's winrate definition |
+| `tt_cav_roll`, `cav_adv_roll` | the same, averaged over `roll_episodes` (100) — read these, not the per-day values |
+| `reward`, `excess_mean` | where the return is |
 | `clip_frac` | fraction of SUMO travel-time outliers clipped |
 | **`route_switch_frac`**, **`herd_index`** | the T4 commons signature: steering onto the fast route *loads* it. Rising herd alongside rising trust is the externality becoming visible. |
 

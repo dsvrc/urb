@@ -36,6 +36,7 @@ Keeping them apart is what stops a bad number being blamed on the wrong thing.
 import csv
 import os
 import time
+from collections import deque
 
 import numpy as np
 
@@ -70,7 +71,7 @@ class Pact1Coordinator(object):
 
     # ------------------------------------------------------------------ init
     def __init__(self, basis, agent_table, av_ids, free_flow, cfg, run_dir,
-                 log_name="pact1_debug.csv"):
+                 log_name="pact1_debug.csv", exp_id=None):
         """
         Args:
             basis:       a built ``RouteBasis``.
@@ -246,12 +247,28 @@ class Pact1Coordinator(object):
         self._last_cond = float("nan")
         self._t0 = time.time()
 
+        # ---- rolling window for the "is it beating the baseline" read ----------
+        # Per-episode travel time is noisy enough that a single row says nothing.
+        # URB's own winrate criterion is "CAVs were on average faster than human
+        # drivers", i.e. cav_adv = t_HDV / t_CAV > 1, so that is what gets smoothed
+        # and printed -- it is config-independent and directly comparable to the
+        # published table.
+        self.roll_n = int(cfg.get("roll_episodes", 100))
+        self._roll_cav = deque(maxlen=self.roll_n)
+        self._roll_adv = deque(maxlen=self.roll_n)
+
         # ---- diagnostics file ----------------------------------------------------
+        # Default location is the REPO ROOT, not results/<exp_id>/, so a long run can
+        # be tailed without hunting for it. Name carries exp_id so parallel arms
+        # never clobber each other.
         self.run_dir = run_dir
         self._dbg = self._dbg_w = None
-        if run_dir:
-            os.makedirs(run_dir, exist_ok=True)
-            path = os.path.join(run_dir, log_name)
+        debug_dir = cfg.get("debug_dir", run_dir)
+        if exp_id:
+            log_name = f"pact1_debug_{exp_id}.csv"
+        if debug_dir:
+            os.makedirs(debug_dir, exist_ok=True)
+            path = os.path.join(debug_dir, log_name)
             self._dbg = open(path, "w", newline="", encoding="utf-8")
             self._dbg_w = csv.writer(self._dbg)
             self._dbg_w.writerow(self.COLUMNS)
@@ -274,8 +291,14 @@ class Pact1Coordinator(object):
         "x_local", "x_collector", "x_arterial", "x_std",
         # trust -- applied and policy-set reported SEPARATELY (guide III.11)
         "trust_pol", "trust_app", "trust_spread", "shift_absmean",
-        # where the return is
-        "tt_cav", "tt_hdv", "reward", "excess_mean", "clip_frac",
+        # WHERE THE RETURN IS -- these are the columns that answer "is it winning".
+        # tt_cav / tt_hdv are in RouteRL's own units, so they are directly
+        # comparable to the t_CAV / t_HDV of URB's published table (St. Arnoult
+        # reference: t_pre 3.15, QMIX 3.21, IPPO 3.33, greedy/AON 3.01).
+        # cav_adv = t_HDV / t_CAV is URB's CAV-advantage; > 1 is a "won" run by the
+        # benchmark's own winrate definition.
+        "tt_cav", "tt_hdv", "cav_adv", "tt_cav_roll", "cav_adv_roll",
+        "reward", "excess_mean", "clip_frac",
         # the commons signature (T4 / guide III.8)
         "route_switch_frac", "herd_index",
         "wall_s",
@@ -668,6 +691,17 @@ class Pact1Coordinator(object):
                if seen.any() else float("nan"))
         sh = float(np.mean(self._trust_log[seen, 2])) if seen.any() else float("nan")
 
+        # --- the "is it winning" block ------------------------------------------
+        cav_adv = (float(tt_hdv) / float(tt_cav)
+                   if np.isfinite(tt_hdv) and np.isfinite(tt_cav) and tt_cav > 1e-9
+                   else float("nan"))
+        if np.isfinite(tt_cav):
+            self._roll_cav.append(float(tt_cav))
+        if np.isfinite(cav_adv):
+            self._roll_adv.append(cav_adv)
+        tt_cav_roll = float(np.mean(self._roll_cav)) if self._roll_cav else float("nan")
+        cav_adv_roll = float(np.mean(self._roll_adv)) if self._roll_adv else float("nan")
+
         xm = [float(np.mean(np.abs(x_true[m]))) for m in range(self.r)]
         row = [
             self._ep, self._phase, int(n_drove), self.n_peer, int(n_peer_valid),
@@ -681,7 +715,9 @@ class Pact1Coordinator(object):
             _r(xm[0], 6), _r(xm[1], 6), _r(xm[2], 6),
             _r(float(np.std(x_true)), 6),
             _r(tp, 5), _r(ta, 5), _r(tsd, 5), _r(sh, 5),
-            _r(tt_cav, 4), _r(tt_hdv, 4), _r(reward, 5), _r(excess_mean, 5),
+            _r(tt_cav, 4), _r(tt_hdv, 4), _r(cav_adv, 5),
+            _r(tt_cav_roll, 4), _r(cav_adv_roll, 5),
+            _r(reward, 5), _r(excess_mean, 5),
             _r(clip_frac, 5), _r(switch, 5), _r(herd, 5),
             _r(time.time() - self._t0, 3),
         ]
@@ -691,13 +727,24 @@ class Pact1Coordinator(object):
 
         pe = int(self.cfg.get("print_every", 25))
         if pe > 0 and self._ep % pe == 0:
+            # The verdict marker is URB's OWN winrate criterion: a run is "won" when
+            # the CAV fleet is on average faster than the human drivers it replaced.
+            # Smoothed over roll_episodes, because a single day says nothing.
+            if not np.isfinite(cav_adv_roll):
+                mark = "  ?  "
+            elif cav_adv_roll > 1.0:
+                mark = " WIN "
+            else:
+                mark = " lose"
             print(
                 f"[PACT-1 ep {self._ep:5d} {self._phase:5s}] "
                 f"fit_r2={_f(fit_r2)} pred_r2={_f(pred_r2)} cond={_f(cond_psi, 1)} | "
                 f"beta=[{_f(B[:,0].mean(),3)} {_f(B[:,1].mean(),3)} "
                 f"{_f(B[:,2].mean(),3)} {_f(B[:,3].mean(),3)}] conf={_f(np.mean(self.conf),3)} | "
                 f"trust pol={_f(tp,3)} app={_f(ta,3)} | "
-                f"tt_cav={_f(tt_cav,3)} switch={_f(switch,3)} herd={_f(herd,3)}",
+                f"tt_cav={_f(tt_cav,3)} roll{self.roll_n}={_f(tt_cav_roll,3)} "
+                f"vs hdv {_f(tt_hdv,3)} adv={_f(cav_adv_roll,3)}[{mark}] | "
+                f"switch={_f(switch,3)} herd={_f(herd,3)}",
                 flush=True,
             )
 
