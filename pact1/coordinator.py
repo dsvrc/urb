@@ -577,7 +577,7 @@ class Pact1Coordinator(object):
 
     # ================================================================== end of day
     def end_episode(self, av_records, peer_actions, reward_mean=np.nan,
-                    tt_hdv=np.nan):
+                    tt_hdv=np.nan, episode=None, phase=None):
         """Identify from what actually happened, then roll the forecast forward.
 
         Args:
@@ -586,7 +586,16 @@ class Pact1Coordinator(object):
                           in scope (machines, plus humans when peer_scope='all').
             reward_mean:  mean AV reward this episode (logging only).
             tt_hdv:       mean human travel time this episode (logging only).
+            episode:      label for the trace row. Records can arrive a day or more
+                          after the day they describe (RouteRL flushes every
+                          ``save_every`` episodes), so the row is labelled with the
+                          episode the DATA belongs to, not the loop counter.
+            phase:        overrides the phase label for this row.
         """
+        if episode is not None:
+            self._ep = int(episode)
+        if phase is not None:
+            self._phase = phase
         # ---- peers' executed routes -> global route ids ------------------------
         peer_gid = np.full(self.n_peer, -1, dtype=np.int64)
         for aid, act in peer_actions.items():

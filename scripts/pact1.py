@@ -1,4 +1,4 @@
-"""PACT-1 on URB — online identification of the congestion coupling, learned trust.
+"""PACT-1 on URB -- online identification of the congestion coupling, learned trust.
 
 Run exactly like any other URB algorithm script:
 
@@ -24,7 +24,7 @@ Base URB, unmodified. No injected non-stationarity, no changed reward, no change
 network, no changed demand. The claim being tested is the REDUCTION (guide III.2):
 that this city's congestion coupling lives in a low-dimensional, known basis and
 can therefore be identified online, decentralized, from each vehicle's own
-realized-vs-free-flow residual — and that steering on that estimate beats learning
+realized-vs-free-flow residual -- and that steering on that estimate beats learning
 from scalar reward alone.
 
 Read ``pact1/README.md`` for the column-by-column meaning of the diagnostics and
@@ -78,8 +78,18 @@ if not hasattr(_pact1_pkg, "__path__"):
 from pact1.basis import RouteBasis, load_route_table, parse_sumo_net
 from pact1.coordinator import Pact1Coordinator
 from pact1.policy import Pact1PPO, check_shift_parity
+from pact1.records import RecordSource, split_records
 
 ALGORITHM = "pact1"
+
+# Record key names, in priority order: RouteRL's Keychain constants first (the
+# in-memory record shape), then the plain CSV column names. Whichever the record
+# actually has wins, so both sources parse with one code path.
+RECORD_KEYS = {
+    "id": [kc.AGENT_ID, "id"],
+    "action": [kc.ACTION, "action"],
+    "travel_time": [kc.TRAVEL_TIME, "travel_time"],
+}
 
 
 # ==========================================================================
@@ -122,53 +132,6 @@ def _aid(v):
     except (TypeError, ValueError):
         return str(v)
 
-
-def drain_episode_records(env, cursor):
-    """Return (new_records, new_cursor) from ``env.travel_times_list``.
-
-    RouteRL appends one record per completed trip. The list is not guaranteed to
-    be reset per episode, so a cursor is used (the same approach URB's own
-    centralized wrapper takes); a list that shrank means it WAS reset, and the
-    cursor is rewound rather than silently skipping a whole day.
-    """
-    lst = getattr(env, "travel_times_list", None)
-    if lst is None:
-        lst = getattr(env, "last_episode_travel_times", None)
-        return (list(lst) if lst else []), 0
-    if len(lst) < cursor:
-        cursor = 0
-    return list(lst[cursor:]), len(lst)
-
-
-def split_records(records, machine_ids):
-    """-> (av_records, peer_actions, tt_hdv, n_bad).
-
-    av_records:   id -> (action, travel_time)   machine agents only
-    peer_actions: id -> action                  EVERY traveller that completed a trip
-    """
-    av, peers, hdv, bad = {}, {}, [], 0
-    for rec in records:
-        if not isinstance(rec, dict):
-            bad += 1
-            continue
-        rid = rec.get(kc.AGENT_ID)
-        act = rec.get(kc.ACTION)
-        tt = rec.get(kc.TRAVEL_TIME)
-        if rid is None or act is None:
-            bad += 1
-            continue
-        aid = _aid(rid)
-        try:
-            peers[aid] = int(act)
-        except (TypeError, ValueError):
-            bad += 1
-            continue
-        if aid in machine_ids:
-            if tt is not None:
-                av[aid] = (int(act), float(tt))
-        elif tt is not None:
-            hdv.append(float(tt))
-    return av, peers, (float(np.mean(hdv)) if hdv else float("nan")), bad
 
 
 # ==========================================================================
@@ -241,6 +204,17 @@ def main():
         pact_cfg["trust_mode"] = {"pact1": "learned", "blind": "off",
                                   "fixed": "fixed"}[args.arm]
 
+    # RouteRL flushes per-episode records to disk every `save_every` days, and those
+    # records are how the estimator learns. Batched flushes are handled correctly
+    # (each file is one self-consistent day), but they delay identification by up to
+    # save_every days for no benefit -- so flush daily. This is a DISK setting only;
+    # it changes no dynamics and nothing the baselines are compared on.
+    save_every_eff = int(pact_cfg.get("save_every_override", 1))
+    if save_every_eff != int(save_every):                           # noqa: F821
+        print(f"[PACT-1] save_every {save_every} -> {save_every_eff} "  # noqa: F821
+              f"(disk flush frequency only; the estimator reads these files)",
+              flush=True)
+
     # ---- the ONE gate that costs nothing: run it before touching SUMO --------
     ok, worst, floor_ok = check_shift_parity(kappa=float(pact_cfg.get("kappa", 1.0)))
     print(f"[PACT-1] GATE 2b torch/numpy shift parity: {'PASS' if ok else 'FAIL'} "
@@ -311,7 +285,7 @@ def main():
                 "observation_type": observations,                  # noqa: F821
             },
         },
-        environment_parameters={"save_every": save_every},         # noqa: F821
+        environment_parameters={"save_every": save_every_eff},
         simulator_parameters={
             "network_name": network,
             "custom_network_folder": custom_network_folder,
@@ -456,7 +430,11 @@ def main():
     probe = args.mode == "probe"
     n_train = int(args.probe_eps) if probe else int(training_eps)   # noqa: F821
     rng_probe = np.random.RandomState(env_seed + 7919)
-    cursor = 0
+    src = RecordSource(env, records_folder)
+    seen_records = False
+    # Records only appear when RouteRL flushes, so the first ones can be a few days
+    # late. Give the liveness check a grace period rather than failing on day 0.
+    grace = max(int(save_every_eff) * 3, 12)
     os.makedirs(plots_folder, exist_ok=True)
     pbar.set_description("PACT-1 probe" if probe else "AV learning")
 
@@ -491,47 +469,61 @@ def main():
 
             env.step(action)
 
-        records, cursor = drain_episode_records(env, cursor)
-        av_rec, peer_act, tt_hdv, n_bad = split_records(records, machine_ids)
-
-        if episode == 0:
+        n_bad = 0
+        for ep_label, records in src.drain(episode):
+            av_rec, peer_act, tt_hdv, n_bad = split_records(
+                records, machine_ids, RECORD_KEYS, _aid)
             if not av_rec:
-                raise AssertionError(
-                    "[PACT-1][GATE FAIL] no AV travel-time records were recovered "
-                    "after episode 0, so the estimator would never receive a single "
-                    "row and the whole method would be silently inert.\n"
-                    f"        drained {len(records)} records, {n_bad} unparseable. "
-                    "Check that RouteRL exposes `travel_times_list` in this version."
-                )
-            n_human_rec = len(peer_act) - len(av_rec)
-            print(f"[PACT-1] episode 0 records: {len(records)} drained, "
-                  f"{len(av_rec)} AV, {n_human_rec} human, {n_bad} unparseable",
-                  flush=True)
-            if coord.peer_scope == "all" and n_human_rec < 1:
-                # Not fatal -- the method still works off fleet load alone -- but it
-                # silently changes what is being identified, so it must never pass
-                # unnoticed (guide II.7: a return that looks fine is the failure
-                # nobody investigates).
-                print(
-                    "[PACT-1][WARN] peer_scope='all' but NO human records were "
-                    "recovered, so the waveform sees fleet traffic only. The human "
-                    "background will be absorbed into the intercept instead of the "
-                    "class channels. Either accept this and report peer_scope as "
-                    "effectively 'fleet', or check RouteRL's record schema.",
-                    flush=True,
-                )
+                continue
+            if not seen_records:
+                seen_records = True
+                # Cross-check the recorded actions against the ones we issued. If
+                # the id normalisation or the record schema were off, every
+                # waveform would describe a route nobody drove -- and nothing else
+                # would look wrong. Only meaningful when the labels line up.
+                if ep_label == episode and chosen:
+                    both = [a for a in chosen if a in peer_act]
+                    agree = sum(1 for a in both if peer_act[a] == chosen[a])
+                    print(f"[PACT-1] action cross-check: {agree}/{len(both)} "
+                          f"recorded actions match the ones issued", flush=True)
+                    if both and agree < len(both):
+                        print("[PACT-1][WARN] recorded and issued actions disagree. "
+                              "Check _aid() normalisation against RouteRL's id "
+                              "column before trusting any identification.",
+                              flush=True)
+                n_human_rec = len(peer_act) - len(av_rec)
+                print(f"[PACT-1] first records at episode {episode} "
+                      f"(labelled ep{ep_label}): {len(records)} drained, "
+                      f"{len(av_rec)} AV, {n_human_rec} human, "
+                      f"{n_bad} unparseable", flush=True)
+                if coord.peer_scope == "all" and n_human_rec < 1:
+                    # Not fatal -- the method still works off fleet load alone --
+                    # but it silently changes what is being identified, so it must
+                    # never pass unnoticed (guide II.7: a return that looks fine is
+                    # the failure nobody investigates).
+                    print(
+                        "[PACT-1][WARN] peer_scope='all' but NO human records were "
+                        "recovered, so the waveform sees fleet traffic only. The "
+                        "human background will be absorbed into the intercept "
+                        "instead of the class channels. Either accept this and "
+                        "report peer_scope as effectively 'fleet', or check "
+                        "RouteRL's record schema.",
+                        flush=True,
+                    )
+            coord.end_episode(
+                av_rec, peer_act,
+                reward_mean=float(np.mean(rewards)) if rewards else float("nan"),
+                tt_hdv=tt_hdv, episode=ep_label,
+            )
 
-        # trust the actions we actually issued over the recorded ones
-        for aid, k in chosen.items():
-            peer_act[aid] = k
-            if aid in av_rec:
-                av_rec[aid] = (k, av_rec[aid][1])
-
-        coord.end_episode(
-            av_rec, peer_act,
-            reward_mean=float(np.mean(rewards)) if rewards else float("nan"),
-            tt_hdv=tt_hdv,
-        )
+        if (not seen_records) and episode >= grace:
+            raise AssertionError(
+                "[PACT-1][GATE FAIL] no AV travel-time records after "
+                f"{episode + 1} episodes, so the estimator has never received a "
+                "single row and the method is silently inert.\n"
+                f"        {n_bad} unparseable in the last drain.\n"
+                + src.diagnose()
+            )
 
         if (not probe) and episode % plot_every == 0:                  # noqa: F821
             env.plot_results()
@@ -578,17 +570,15 @@ def main():
                 chosen[aid] = int(action)
             env.step(action)
 
-        records, cursor = drain_episode_records(env, cursor)
-        av_rec, peer_act, tt_hdv, _ = split_records(records, machine_ids)
-        for aid, k in chosen.items():
-            peer_act[aid] = k
-            if aid in av_rec:
-                av_rec[aid] = (k, av_rec[aid][1])
-        coord.end_episode(
-            av_rec, peer_act,
-            reward_mean=float(np.mean(rewards)) if rewards else float("nan"),
-            tt_hdv=tt_hdv,
-        )
+        for ep_label, records in src.drain(int(training_eps) + episode):  # noqa: F821
+            av_rec, peer_act, tt_hdv, _ = split_records(
+                records, machine_ids, RECORD_KEYS, _aid)
+            if av_rec:
+                coord.end_episode(
+                    av_rec, peer_act,
+                    reward_mean=float(np.mean(rewards)) if rewards else float("nan"),
+                    tt_hdv=tt_hdv, episode=ep_label, phase="test",
+                )
         pbar.update()
 
     # ---------------------------------------------------------------- finish

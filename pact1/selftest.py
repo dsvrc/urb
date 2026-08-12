@@ -370,6 +370,87 @@ def test_mixed_class_city_is_harder_but_still_identifiable():
 
 
 # ==========================================================================
+#  record plumbing -- the silent-failure path
+# ==========================================================================
+def _write_ep_csv(d, ep, rows):
+    import pandas as pd
+    os.makedirs(d, exist_ok=True)
+    pd.DataFrame(rows).to_csv(os.path.join(d, f"ep{ep}.csv"), index=False)
+
+
+def test_records_from_episode_csvs_are_batched_per_day():
+    """A multi-day flush must NOT be merged: pooling days would pair one day's
+    travel time with another day's peer waveform, which shows up only as an
+    inexplicably low fit_r2."""
+    import tempfile
+    from pact1.records import RecordSource, split_records
+
+    base = tempfile.mkdtemp()
+    eps = os.path.join(base, "episodes")
+    for ep in (1, 2, 3):
+        _write_ep_csv(eps, ep, [
+            {"id": i, "action": (i + ep) % 4, "travel_time": 100.0 + i + ep}
+            for i in range(6)
+        ])
+
+    src = RecordSource(object(), base)           # a bare object: no memory source
+    batches = src.drain(episode=0)
+    assert [b[0] for b in batches] == [1, 2, 3], f"batches out of order: {batches}"
+    assert all(len(b[1]) == 6 for b in batches), "records lost"
+
+    # already-consumed files must not reappear
+    assert src.drain(episode=1) == [], "episode files were re-consumed"
+    _write_ep_csv(eps, 4, [{"id": 0, "action": 1, "travel_time": 7.0}])
+    assert [b[0] for b in src.drain(episode=2)] == [4], "new episode not picked up"
+
+    av, peers, hdv, bad = split_records(batches[0][1], machine_ids={"0", "1", "2"})
+    assert bad == 0
+    assert set(av) == {"0", "1", "2"}, f"machine split wrong: {av}"
+    assert len(peers) == 6, "humans missing from the peer set"
+    assert np.isfinite(hdv), "human travel time not recovered"
+
+
+def test_records_prefers_memory_when_available():
+    from pact1.records import RecordSource
+
+    class Env:
+        travel_times_list = [{"id": 1, "action": 2, "travel_time": 9.0}]
+
+    src = RecordSource(Env(), "/nonexistent")
+    b = src.drain(episode=7)
+    assert len(b) == 1 and b[0][0] == 7, "memory batch mislabelled"
+    assert src.drain(episode=8) == [], "cumulative list re-read from the start"
+
+
+def test_records_handle_both_key_shapes():
+    """In-memory records are keyed by RouteRL's Keychain constants, CSV rows by
+    plain column names. One code path must parse both."""
+    from pact1.records import split_records
+
+    keys = {"id": ["agent_id", "id"], "action": ["act", "action"],
+            "travel_time": ["tt", "travel_time"]}
+    mem = [{"agent_id": 3, "act": 1, "tt": 50.0}]
+    csv = [{"id": 3, "action": 1, "travel_time": 50.0}]
+    a1, p1, _, b1 = split_records(mem, {"3"}, keys)
+    a2, p2, _, b2 = split_records(csv, {"3"}, keys)
+    assert b1 == 0 and b2 == 0, "records rejected"
+    assert a1 == a2 == {"3": (1, 50.0)}, f"{a1} != {a2}"
+    assert p1 == p2 == {"3": 1}
+
+
+def test_records_reject_garbage_without_crashing():
+    from pact1.records import split_records
+    recs = [None, {}, {"id": 1}, {"id": 2, "action": "x", "travel_time": 1.0},
+            {"id": 3, "action": 1, "travel_time": float("nan")},
+            {"id": 4, "action": 0, "travel_time": 12.0}]
+    av, peers, hdv, bad = split_records(recs, {"4"})
+    assert bad >= 3, f"garbage not counted: bad={bad}"
+    assert av == {"4": (0, 12.0)}, f"good record lost: {av}"
+    assert "3" in peers, "a valid action with a bad travel time should still count "\
+                         "as a peer choice"
+
+
+# ==========================================================================
 #  the policy (host PPO + trust head)
 # ==========================================================================
 def _toy_policy_setup(trust_mode="learned", n_agents=16, seed=5):
