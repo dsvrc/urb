@@ -191,14 +191,49 @@ def trust_from_w(w, prev, ema, g_max=1.0, bias=2.2):
 
 
 def rls_confidence(P, p0, r):
-    """How much the estimator believes itself, in [0, 1], from its own covariance.
+    """TRACE confidence: conf = 1/(1 + tr(P)/p0).
 
-    conf = 1/(1 + tr(P)/p0): equals 1/(1+r) at the prior and rises to 1 as P
-    shrinks. Reliance therefore ramps itself in exactly as fast as the estimate
-    firms up — the honest version of a warmup, with no extra hyperparameter. The
-    covariance IS the trust prior; the policy only modulates it (guide III.5).
+    *** THIS IS THE WRONG GATE ON A NEAR-DEGENERATE REGRESSOR. Kept only for the
+    ablation; ``conf_mode: "pred"`` is the default. ***
+
+    It equals 1/(1+r) at the prior and rises to 1 as P shrinks, which is the
+    intended behaviour when every direction is excited. But tr(P) is dominated by
+    the LEAST excited direction, and RLS with forgetting inflates exactly those
+    directions by 1/mu on every update, without bound. So once the fleet converges
+    and the regressor stops varying, tr(P) grows even though the PREDICTION stays
+    perfect -- and the gate quietly disarms a working compensator.
+
+    Measured on SMAC: conf 0.75 -> 0.44 over 1.8M steps against a 0.5 threshold.
+    Measured on URB saint_arnoult, far worse because route choice freezes hard:
+    conf 0.20 -> 0.005 over 4200 days while fit_r2 sat at 0.9998, taking applied
+    trust to 0.003 and reducing the whole arm to plain IPPO.
     """
     return 1.0 / (1.0 + float(np.trace(P)) / max(1e-9, float(p0)))
+
+
+def rls_confidence_pred(P, p0, r, psi):
+    """PREDICTION confidence -- the default, and the right one.
+
+        conf = 1 / (1 + r * psi^T P psi / (p0 * ||psi||^2))
+
+    The compensator only ever uses ``beta_hat . psi``, so the uncertainty that
+    matters is the uncertainty of THAT scalar, not of the whole parameter vector.
+    Directions the data never excites are also directions the prediction never
+    uses, so their inflated variance is correctly ignored.
+
+    Same range and the same cold value as the trace version -- at the prior
+    ``P = p0*I`` gives ``psi^T P psi = p0*||psi||^2`` and hence exactly ``1/(1+r)``
+    -- so thresholds carry over unchanged. It converges to 1 as the prediction
+    firms up, and, unlike the trace, it does not decay when excitation dies.
+    """
+    psi = np.asarray(psi, dtype=np.float64).reshape(-1)
+    n2 = float(psi @ psi)
+    if not np.isfinite(n2) or n2 < 1e-18:
+        return 1.0 / (1.0 + r)
+    v = float(psi @ (np.asarray(P, dtype=np.float64) @ psi))
+    if not np.isfinite(v) or v < 0.0:
+        return 1.0 / (1.0 + r)
+    return 1.0 / (1.0 + r * v / max(1e-12, float(p0) * n2))
 
 
 # ==========================================================================

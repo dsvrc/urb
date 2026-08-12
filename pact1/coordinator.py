@@ -46,6 +46,7 @@ from pact1.core import (
     predict_excess,
     relative_excess,
     rls_confidence,
+    rls_confidence_pred,
     trust_from_w,
 )
 
@@ -97,6 +98,13 @@ class Pact1Coordinator(object):
         self.g_bias = float(cfg.get("g_bias", 2.2))            # -> 0.90 at w=0
         self.kappa = float(cfg.get("kappa", 1.0))              # logit-shift scale
         self.use_conf = bool(cfg.get("confidence_gate", True))
+        # *** WHICH CONFIDENCE GATES THE COMPENSATOR. DEFAULT "pred". ***
+        # "trace" is the original tr(P) form and is the WRONG gate once excitation
+        # dies -- see core.rls_confidence. Keep "trace" only for the ablation.
+        self.conf_mode = str(cfg.get("conf_mode", "pred")).lower()
+        assert self.conf_mode in ("pred", "trace"), (
+            f"conf_mode must be 'pred' or 'trace' (got {self.conf_mode!r})"
+        )
         self.y_clip = float(cfg.get("y_clip", 10.0))
         self.peer_scope = str(cfg.get("peer_scope", "all")).lower()
         self.trust_mode = str(cfg.get("trust_mode", "learned")).lower()
@@ -113,7 +121,8 @@ class Pact1Coordinator(object):
         # ---- gates ------------------------------------------------------------
         self.gate_abort = bool(cfg.get("gate_abort", True))
         self.gate_after = int(cfg.get("gate_after_episodes", 300))
-        self.gate_min_fit_r2 = float(cfg.get("gate_min_fit_r2", 0.05))
+        # threshold on fit_GAIN (lift over an intercept-only model), not fit_r2
+        self.gate_min_fit_gain = float(cfg.get("gate_min_fit_gain", 0.01))
         self.gate_window = int(cfg.get("gate_window", 50))
         self.gate_live_after = int(cfg.get("gate_live_after_episodes", 20))
         self.gate_cond_warn = float(cfg.get("gate_cond_warn", 1e6))
@@ -286,7 +295,11 @@ class Pact1Coordinator(object):
         "beta_intercept", "beta_local", "beta_collector", "beta_arterial",
         "beta_spread", "innov", "conf", "n_upd",
         # THE gates
-        "fit_r2", "pred_r2", "fit_mae", "pred_mae", "cond_psi",
+        # fit_gain is the one to read: fit_r2 MINUS an intercept-only model. Raw
+        # fit_r2 is inflated by the per-agent intercept memorising each traveller's
+        # typical delay (see end_episode).
+        "fit_r2", "fit_base_r2", "fit_gain", "pred_r2", "fit_mae", "pred_mae",
+        "cond_psi",
         # excitation / liveness
         "x_local", "x_collector", "x_arterial", "x_std",
         # trust -- applied and policy-set reported SEPARATELY (guide III.11)
@@ -360,7 +373,9 @@ class Pact1Coordinator(object):
             print(f"             WARNING: {s['missing_edge_frac']:.4f} of route edges "
                   f"were not found in the network file")
         print(f"  estimator  p={self.p} (intercept + {self.r}) forget={self.mu} "
-              f"p0={self.p0} conf_gate={self.use_conf}")
+              f"p0={self.p0} conf_gate={self.use_conf} mode={self.conf_mode}"
+              + ("   *** trace: DISARMS once excitation dies ***"
+                 if self.conf_mode == "trace" else ""))
         print(f"  forecast   occupancy EMA rho={self.rho}  "
               f"(rho=0 => yesterday-only persistence)")
         print(f"  trust      mode={self.trust_mode} g_max={self.g_max} "
@@ -381,8 +396,9 @@ class Pact1Coordinator(object):
         if self.trust_mode == "off":
             print("  [ARM] trust_mode=off -> this is the BLIND arm (plain IPPO through\n"
                   "        the identical wrapper, so nothing else can differ).")
-        print(f"  gates      abort={self.gate_abort} fit_r2>={self.gate_min_fit_r2} "
-              f"after {self.gate_after} eps (window {self.gate_window})")
+        print(f"  gates      abort={self.gate_abort} "
+              f"fit_gain>={self.gate_min_fit_gain} after {self.gate_after} eps "
+              f"(window {self.gate_window})")
         if self.debug_path:
             print(f"  trace      {self.debug_path}")
         if extra:
@@ -507,20 +523,32 @@ class Pact1Coordinator(object):
         self._trust_seen[:] = False
 
         Xz = self.standardize(self.X_ema)
+        psi_all = np.empty((self.n_av, self.K, self.p))
         for i in range(self.n_av):
             psi = np.concatenate(
                 [np.ones((self.K, 1)), Xz[:, i, :].T], axis=1
             )                                            # (K, p)
+            psi_all[i] = psi
             self.d_hat[i] = predict_excess(self._beta(i), psi)
         self.tt_hat = self.agent_fft * (1.0 + self.d_hat)
 
-        if self.use_conf:
+        if not self.use_conf:
+            self.conf = np.ones(self.n_av)
+        elif self.conf_mode == "pred":
+            # Evaluated along the regressors the compensator will actually use --
+            # averaged over the agent's K candidate routes, since it must trust the
+            # whole comparison, not one route.
+            self.conf = np.array([
+                float(np.mean([
+                    rls_confidence_pred(self.rls[i].P, self.p0, self.p, psi_all[i, k])
+                    for k in range(self.K)
+                ])) for i in range(self.n_av)
+            ])
+        else:
             self.conf = np.array(
                 [rls_confidence(self.rls[i].P, self.p0, self.p)
                  for i in range(self.n_av)]
             )
-        else:
-            self.conf = np.ones(self.n_av)
 
     def _beta(self, i):
         if self.freeze_beta is not None:
@@ -654,6 +682,7 @@ class Pact1Coordinator(object):
 
         drove = np.nonzero(act_of >= 0)[0]
         fit_r2 = pred_r2 = fit_mae = pred_mae = cond_psi = float("nan")
+        base_r2 = fit_gain = float("nan")
         clip_frac = float("nan")
         excess_mean = float("nan")
 
@@ -681,6 +710,20 @@ class Pact1Coordinator(object):
             cond_psi = _cond(psi)
             self._last_cond = cond_psi
 
+            # *** THE BASELINE THAT MAKES fit_r2 MEAN ANYTHING. ***
+            # Each agent carries its own intercept, and in URB each agent has a
+            # FIXED origin, destination and departure time -- so the intercept
+            # alone memorises that traveller's typical delay, and pooling across
+            # agents gives R^2 ~ 1 whatever the class channels do. Measured on
+            # saint_arnoult: fit_r2 = 0.9998 while the class terms contributed
+            # ~2.5% of the predicted excess. The honest quantity is the LIFT over
+            # an intercept-only model; report fit_gain, not fit_r2.
+            base = np.array([float(self._beta(i)[0]) for i in drove])
+            base_r2, _ = _score(y, base)
+            fit_gain = (fit_r2 - base_r2
+                        if np.isfinite(fit_r2) and np.isfinite(base_r2)
+                        else float("nan"))
+
             # --- identify -------------------------------------------------------
             if self.freeze_beta is None:
                 for t, i in enumerate(drove):
@@ -706,16 +749,16 @@ class Pact1Coordinator(object):
         herd = herd_index(counts) if counts is not None else float("nan")
 
         self._write_row(
-            n_peer_valid, drove.size, x_true, fit_r2, pred_r2, fit_mae, pred_mae,
-            cond_psi, np.nanmean(tt_of), tt_hdv, reward_mean, excess_mean,
-            clip_frac, switch, herd,
+            n_peer_valid, drove.size, x_true, fit_r2, base_r2, fit_gain, pred_r2,
+            fit_mae, pred_mae, cond_psi, np.nanmean(tt_of), tt_hdv, reward_mean,
+            excess_mean, clip_frac, switch, herd,
         )
-        self._run_gates(fit_r2, x_true, cond_psi)
+        self._run_gates(fit_gain, x_true, cond_psi)
 
     # ------------------------------------------------------------------ logging
-    def _write_row(self, n_peer_valid, n_drove, x_true, fit_r2, pred_r2, fit_mae,
-                   pred_mae, cond_psi, tt_cav, tt_hdv, reward, excess_mean,
-                   clip_frac, switch, herd):
+    def _write_row(self, n_peer_valid, n_drove, x_true, fit_r2, base_r2, fit_gain,
+                   pred_r2, fit_mae, pred_mae, cond_psi, tt_cav, tt_hdv, reward,
+                   excess_mean, clip_frac, switch, herd):
         B = np.array([self._beta(i) for i in range(self.n_av)])
         seen = self._trust_seen
         tp = float(np.mean(self._trust_log[seen, 0])) if seen.any() else float("nan")
@@ -743,8 +786,8 @@ class Pact1Coordinator(object):
             _r(np.mean([e.innov for e in self.rls]), 6),
             _r(float(np.mean(self.conf)), 5),
             int(np.sum([e.n_updates for e in self.rls])),
-            _r(fit_r2, 5), _r(pred_r2, 5), _r(fit_mae, 6), _r(pred_mae, 6),
-            _r(cond_psi, 2),
+            _r(fit_r2, 5), _r(base_r2, 5), _r(fit_gain, 5), _r(pred_r2, 5),
+            _r(fit_mae, 6), _r(pred_mae, 6), _r(cond_psi, 2),
             _r(xm[0], 6), _r(xm[1], 6), _r(xm[2], 6),
             _r(float(np.std(x_true)), 6),
             _r(tp, 5), _r(ta, 5), _r(tsd, 5), _r(sh, 5),
@@ -760,6 +803,8 @@ class Pact1Coordinator(object):
 
         pe = int(self.cfg.get("print_every", 25))
         if pe > 0 and self._ep % pe == 0:
+            fit_gain = (fit_r2 - base_r2 if np.isfinite(fit_r2)
+                        and np.isfinite(base_r2) else float("nan"))
             # The verdict marker is URB's OWN winrate criterion: a run is "won" when
             # the CAV fleet is on average faster than the human drivers it replaced.
             # Smoothed over roll_episodes, because a single day says nothing.
@@ -771,7 +816,8 @@ class Pact1Coordinator(object):
                 mark = " lose"
             print(
                 f"[PACT-1 ep {self._ep:5d} {self._phase:5s}] "
-                f"fit_r2={_f(fit_r2)} pred_r2={_f(pred_r2)} cond={_f(cond_psi, 1)} | "
+                f"fit_gain={_f(fit_gain)} (r2={_f(fit_r2,3)}) pred_r2={_f(pred_r2,3)} "
+                f"cond={_f(cond_psi, 1)} | "
                 f"beta=[{_f(B[:,0].mean(),3)} {_f(B[:,1].mean(),3)} "
                 f"{_f(B[:,2].mean(),3)} {_f(B[:,3].mean(),3)}] conf={_f(np.mean(self.conf),3)} | "
                 f"trust pol={_f(tp,3)} app={_f(ta,3)} | "
@@ -782,7 +828,7 @@ class Pact1Coordinator(object):
             )
 
     # ------------------------------------------------------------------ gates
-    def _run_gates(self, fit_r2, x_true, cond_psi):
+    def _run_gates(self, fit_gain, x_true, cond_psi):
         ep = self._ep
 
         # GATE 5 -- liveness. An inert waveform means the whole method is a no-op,
@@ -807,27 +853,30 @@ class Pact1Coordinator(object):
                     raise AssertionError(msg)
                 print(msg + "  (gate_abort=false)", flush=True)
 
-        # GATE 6 -- does the reduction actually hold in this city? THE credit saver.
-        if np.isfinite(fit_r2):
-            self._fit_hist.append(float(fit_r2))
+        # GATE 6 -- does the reduction actually ADD anything? THE credit saver.
+        # Gated on fit_GAIN, not fit_r2: in URB every agent has a fixed OD and
+        # departure time, so a per-agent intercept alone scores R^2 ~ 1 and raw
+        # fit_r2 cannot distinguish a working basis from a useless one.
+        if np.isfinite(fit_gain):
+            self._fit_hist.append(float(fit_gain))
         if (not self._gate_fired["fit"] and ep >= self.gate_after
                 and len(self._fit_hist) >= self.gate_window):
             self._gate_fired["fit"] = True
             recent = float(np.mean(self._fit_hist[-self.gate_window :]))
-            ok = recent >= self.gate_min_fit_r2
+            ok = recent >= self.gate_min_fit_gain
             print(
                 f"[PACT-1][GATE 6 reduction] {'PASS' if ok else 'FAIL'} at ep {ep}: "
-                f"fit_r2 over the last {self.gate_window} episodes = {recent:.4f} "
-                f"(need >= {self.gate_min_fit_r2})",
+                f"fit_gain over the last {self.gate_window} episodes = {recent:.5f} "
+                f"(need >= {self.gate_min_fit_gain})",
                 flush=True,
             )
             if not ok:
                 msg = (
-                    f"[PACT-1][GATE FAIL] mean fit_r2={recent:.4f} < "
-                    f"{self.gate_min_fit_r2} after {ep} episodes.\n"
-                    "        The linear road-class model does not explain this "
-                    "network's delays, so the reduction PACT-1 rests on does not "
-                    "hold here and no amount of trust will help.\n"
+                    f"[PACT-1][GATE FAIL] mean fit_gain={recent:.5f} < "
+                    f"{self.gate_min_fit_gain} after {ep} episodes.\n"
+                    "        The road-class channels add nothing over a per-agent "
+                    "constant, so the reduction PACT-1 rests on buys nothing here "
+                    "and no amount of trust will help.\n"
                     "        Before spending more: try peer_scope='all', a larger "
                     "dur_factor (wider co-presence), or a different basis. STOPPING."
                 )
@@ -838,10 +887,27 @@ class Pact1Coordinator(object):
         # GATE 7 -- conditioning. Report-only by design (guide III.6): a degenerate
         # regressor still PREDICTS fine, it just cannot DECOMPOSE theta. Claim
         # accordingly rather than aborting.
-        if (not self._gate_fired["cond"] and ep >= self.gate_after
-                and np.isfinite(cond_psi)):
+        #
+        # NOTE: a NON-FINITE cond is the WORST case, not a missing measurement -- it
+        # means the design matrix is exactly singular (a channel that never varies
+        # is collinear with the intercept). An earlier version skipped the check
+        # when cond was not finite, so the most degenerate basis possible passed
+        # silently. Fire on it.
+        if not self._gate_fired["cond"] and ep >= self.gate_after:
             self._gate_fired["cond"] = True
-            if cond_psi > self.gate_cond_warn:
+            if not np.isfinite(cond_psi):
+                print(
+                    f"[PACT-1][GATE 7 conditioning] SINGULAR at ep {ep}: "
+                    "cond(E[psi psi^T]) is not finite.\n"
+                    "        At least one road-class channel does not vary, so it is "
+                    "exactly collinear with the intercept and r is effectively "
+                    "lower than 3.\n"
+                    "        The prediction can still be fine, but the per-class "
+                    "split is MEANINGLESS here. Check the x_* columns for a channel "
+                    "that never moves.",
+                    flush=True,
+                )
+            elif cond_psi > self.gate_cond_warn:
                 print(
                     f"[PACT-1][GATE 7 conditioning] WARN at ep {ep}: "
                     f"cond(E[psi psi^T])={cond_psi:.3e} > {self.gate_cond_warn:.1e}.\n"

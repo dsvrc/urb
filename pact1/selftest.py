@@ -86,11 +86,56 @@ def test_trust_prior_is_inverted():
 
 
 def test_confidence_cold_to_warm():
+    from pact1.core import rls_confidence_pred
     r = 4
-    cold = rls_confidence(np.eye(r) * 10.0, 10.0, r)
-    assert abs(cold - 1.0 / (1.0 + r)) < 1e-9, "cold confidence is not 1/(1+r)"
-    warm = rls_confidence(np.eye(r) * 1e-4, 10.0, r)
-    assert warm > 0.999, "confidence does not approach 1 as P shrinks"
+    psi = np.array([1.0, 0.3, -0.2, 0.5])
+    for fn in (lambda P: rls_confidence(P, 10.0, r),
+               lambda P: rls_confidence_pred(P, 10.0, r, psi)):
+        cold = fn(np.eye(r) * 10.0)
+        assert abs(cold - 1.0 / (1.0 + r)) < 1e-9, \
+            f"cold confidence is {cold:.4f}, not 1/(1+r)"
+        assert fn(np.eye(r) * 1e-4) > 0.999, \
+            "confidence does not approach 1 as P shrinks"
+
+
+def test_pred_confidence_survives_dead_excitation():
+    """THE bug that reduced a 4200-day URB run to plain IPPO.
+
+    Once the fleet converges, every agent's regressor freezes. RLS with forgetting
+    then inflates the UNEXCITED directions by 1/mu on every update without bound,
+    so tr(P) grows even though the prediction stays perfect. The trace gate reads
+    that as "I know nothing", drives applied trust to ~0, and the floor property
+    silently turns the arm into plain IPPO.
+
+    Measured on saint_arnoult: conf 0.20 -> 0.005 over 4200 days while fit_r2 sat
+    at 0.9998 and applied trust ended at 0.003.
+
+    The prediction gate asks the only question that matters -- how uncertain is
+    beta_hat.psi ALONG THE REGRESSOR ACTUALLY USED -- so unexcited directions are
+    correctly ignored.
+    """
+    from pact1.core import rls_confidence_pred
+
+    est = AgentRLS(4, mu=0.999, p0=10.0)
+    psi = np.array([1.0, 0.17, 0.07, 0.008])       # frozen, as in the real run
+    beta = np.array([0.48, 0.07, -0.002, 0.0])
+    for _ in range(4000):
+        est.update(psi[None, :], np.array([psi @ beta]))
+
+    trace_conf = rls_confidence(est.P, 10.0, 4)
+    pred_conf = rls_confidence_pred(est.P, 10.0, 4, psi)
+    err = abs(float(psi @ est.beta) - float(psi @ beta))
+
+    assert err < 1e-3, f"the prediction itself should be excellent, got err {err:.2e}"
+    assert trace_conf < 0.05, (
+        f"expected the trace gate to collapse under dead excitation, got "
+        f"{trace_conf:.4f} -- if this fails the regression test is no longer "
+        "reproducing the real failure"
+    )
+    assert pred_conf > 0.9, (
+        f"the PREDICTION gate collapsed too ({pred_conf:.4f}): the compensator "
+        "would still be disarmed and the arm would silently become plain IPPO"
+    )
 
 
 def test_relative_excess_and_clip():

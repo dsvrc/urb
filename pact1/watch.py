@@ -103,7 +103,9 @@ def main():
     print("=" * 78)
 
     # ---------------------------------------------------------------- 1. health
-    fit = _m(train, "fit_r2", n)
+    fit = _m(train, "fit_gain", n)
+    fit_raw = _m(train, "fit_r2", n)
+    has_gain = "fit_gain" in train.columns
     pred = _m(train, "pred_r2", n)
     cond = _m(train, "cond_psi", n)
     xabs = np.nanmean([_m(train, c, n) for c in
@@ -115,8 +117,16 @@ def main():
     tp_drift = (float(tp0.iloc[-1] - tp0.iloc[0]) if len(tp0) > 1 else float("nan"))
 
     print("\n1. IS THE METHOD WORKING?")
-    print(f"   fit_r2   {_f(fit)}   does the linear road-class model explain "
-          f"realized delay?")
+    if has_gain:
+        print(f"   fit_gain {_f(fit)}   what the road-class channels ADD over a")
+        print(f"                     per-agent constant. THE number -- raw fit_r2")
+        print(f"                     ({_f(fit_raw, 3)}) is inflated by the intercept")
+        print(f"                     memorising each traveller's usual delay.")
+    else:
+        print(f"   fit_r2   {_f(fit_raw)}   NOT INTERPRETABLE on its own: this trace")
+        print(f"                     predates the fit_gain column, and raw fit_r2 is")
+        print(f"                     inflated by the per-agent intercept. Re-run to")
+        print(f"                     get the lift over an intercept-only model.")
     print(f"   pred_r2  {_f(pred)}   is peer load predictable a day ahead?")
     print(f"   cond     {_f(cond, 1)}   can theta be DECOMPOSED, not just predicted?")
     print(f"   x |mean| {_f(xabs)}   waveform liveness (0 => inert)")
@@ -125,19 +135,41 @@ def main():
           f"(policy trust moved {_f(tp_drift)} over the run)")
 
     notes = []
-    if not np.isfinite(fit) or fit < 0.05:
-        notes.append("STOP: fit_r2 below 0.05 -- the reduction does not hold in "
-                     "this city. Nothing downstream can work.")
-    elif fit < 0.2:
-        notes.append("WEAK: fit_r2 is low. Try peer_scope='all' or a larger "
+    # THE FIRST QUESTION: was the compensator even switched on? If applied trust is
+    # ~0 then the floor property makes this arm bit-identical to plain IPPO, and
+    # every other number below describes IPPO, not PACT-1.
+    if np.isfinite(ta) and ta < 0.05:
+        notes.append(
+            f"*** THE COMPENSATOR WAS OFF: applied trust {ta:.4f}. By the floor "
+            "property this run IS plain IPPO -- do not read any result below as "
+            "evidence about PACT-1. ***")
+        if np.isfinite(conf) and conf < 0.2:
+            notes.append(
+                "  cause: estimator confidence collapsed. If conf_mode='trace', "
+                "that is the known covariance-windup failure -- switch to "
+                "conf_mode='pred'.")
+        elif np.isfinite(tp) and tp < 0.2:
+            notes.append("  cause: the POLICY drove trust down. That is a real "
+                         "result -- the return did not reward compensating.")
+    if not has_gain:
+        notes.append("fit_gain is missing from this trace, so whether the reduction "
+                     "adds anything CANNOT be judged from it. Re-run.")
+    elif not np.isfinite(fit) or fit < 0.01:
+        notes.append("STOP: fit_gain ~ 0 -- the road-class channels add nothing "
+                     "over a per-agent constant. The reduction buys nothing here.")
+    elif fit < 0.05:
+        notes.append("WEAK: fit_gain is small. Try peer_scope='all' or a larger "
                      "dur_factor before drawing conclusions.")
     else:
-        notes.append("OK: the reduction holds -- delay really is close to linear "
-                     "in road-class peer load.")
+        notes.append("OK: the class channels genuinely add predictive power.")
     if np.isfinite(fit) and np.isfinite(pred) and fit - pred > 0.3:
         notes.append("fit >> pred: the physics is right but the fleet flaps faster "
                      "than rho tracks. Sweep rho. This is a finding, not a bug.")
-    if np.isfinite(cond) and cond > 1e4:
+    if not np.isfinite(cond):
+        notes.append("cond is SINGULAR: a class channel never varies, so it is "
+                     "collinear with the intercept and r is effectively < 3. The "
+                     "split is meaningless; check which x_* column is frozen.")
+    elif cond > 1e4:
         notes.append("cond is high: report PREDICTION, do not claim to have "
                      "decomposed the per-class sensitivities (guide III.6).")
     if np.isfinite(tp_drift) and abs(tp_drift) < 0.02:

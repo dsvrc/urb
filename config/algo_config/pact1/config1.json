@@ -31,6 +31,7 @@
         "g_ema": 0.9,
         "kappa": 1.0,
         "confidence_gate": true,
+        "conf_mode": "pred",
         "trust_mode": "learned",
         "trust_fixed": 0.9,
 
@@ -46,7 +47,7 @@
 
         "gate_abort": true,
         "gate_after_episodes": 300,
-        "gate_min_fit_r2": 0.05,
+        "gate_min_fit_gain": 0.01,
         "gate_window": 50,
         "gate_live_after_episodes": 20,
         "gate_cond_warn": 1000000.0,
