@@ -93,6 +93,77 @@ def parse_sumo_net(net_path):
     return edges
 
 
+_PATH_COLS = ("origins", "destinations", "path", "free_flow_time")
+_PRUNE = {".git", "networks", "SUMO_output", "episodes", "plots", "__pycache__",
+          "docs", "leaderboard", ".venv", "venv"}
+
+
+def _looks_like_paths_csv(p):
+    try:
+        import pandas as pd
+        head = pd.read_csv(p, nrows=1)
+    except Exception:                                     # noqa: BLE001
+        return False
+    return all(c in head.columns for c in _PATH_COLS)
+
+
+def find_paths_csv(explicit=None, candidates=(), search_roots=(), verbose=True):
+    """Locate RouteRL's generated route table, wherever this version puts it.
+
+    RouteRL writes the route set during path generation, but WHERE depends on the
+    version and on which of the several folder parameters it honours -- URB's own
+    clustered pipeline sidesteps the question by writing the file itself. Rather
+    than hard-coding a guess that breaks on the next release, look in the obvious
+    places and then walk a few bounded roots for any CSV with the right schema.
+
+    Accepts ``routes.csv`` too: URB's exporter writes the identical table under
+    both names because "RouteRL might use either".
+    """
+    if explicit:
+        if os.path.exists(explicit):
+            return explicit
+        raise FileNotFoundError(f"[PACT-1] --paths-csv not found: {explicit}")
+
+    for c in candidates:
+        if c and os.path.exists(c) and _looks_like_paths_csv(c):
+            if verbose:
+                print(f"[PACT-1] route table: {os.path.abspath(c)}", flush=True)
+            return c
+
+    hits = []
+    for root in search_roots:
+        if not root or not os.path.isdir(root):
+            continue
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in _PRUNE]
+            for fn in filenames:
+                if fn in ("paths.csv", "routes.csv"):
+                    p = os.path.join(dirpath, fn)
+                    if _looks_like_paths_csv(p):
+                        hits.append((os.path.getmtime(p), p))
+    if hits:
+        hits.sort(reverse=True)                            # newest first
+        if verbose:
+            print(f"[PACT-1] route table found by search: "
+                  f"{os.path.abspath(hits[0][1])}", flush=True)
+            for _, p in hits[1:4]:
+                print(f"[PACT-1]   (also saw {os.path.abspath(p)})", flush=True)
+        return hits[0][1]
+
+    looked = "\n".join(f"          {os.path.abspath(c)}" for c in candidates if c)
+    roots = "\n".join(f"          {os.path.abspath(r)}" for r in search_roots if r)
+    raise FileNotFoundError(
+        "[PACT-1] could not find RouteRL's route table (paths.csv / routes.csv).\n"
+        "        It must exist before the basis can be built -- it is what maps a\n"
+        "        route index to the links that route uses.\n\n"
+        f"        Checked these exact paths:\n{looked}\n"
+        f"        And searched under:\n{roots}\n\n"
+        "        Fix: find it and pass it explicitly, e.g.\n"
+        "          find /workspace/dsvrc/urb -name 'paths.csv' -newermt '-1 hour'\n"
+        "          python scripts/pact1.py ... --paths-csv /path/to/paths.csv"
+    )
+
+
 def load_paths_csv(paths_csv, n_paths):
     """Read RouteRL's ``paths.csv`` -> ({(o, d): [edge_list per action index]},
     {(o, d): [free_flow_time per action index]}).
@@ -143,6 +214,85 @@ def load_paths_csv(paths_csv, n_paths):
     if not routes:
         raise ValueError(f"[PACT-1] paths.csv parsed to zero OD pairs: {paths_csv}")
     return routes, ffts
+
+
+def load_routes_rou_xml(rou_path, n_paths):
+    """Fallback route source: SUMO's ``route.rou.xml``.
+
+    Route ids are ``{origin}_{destination}_{index}``, so the action index is stated
+    EXPLICITLY rather than implied by row order -- which means this source cannot
+    suffer the permutation failure that ``paths.csv`` can. It carries no free-flow
+    times, so those come from the environment.
+    """
+    if not os.path.exists(rou_path):
+        raise FileNotFoundError(rou_path)
+    routes = {}
+    for _, elem in ET.iterparse(rou_path, events=("end",)):
+        if elem.tag != "route":
+            continue
+        rid = elem.get("id") or ""
+        edges = [e for e in _SPLIT.split((elem.get("edges") or "").strip()) if e]
+        parts = rid.split("_")
+        if len(parts) >= 3 and edges:
+            try:
+                o, d, k = int(parts[-3]), int(parts[-2]), int(parts[-1])
+            except ValueError:
+                elem.clear()
+                continue
+            routes.setdefault((o, d), {})[k] = edges
+        elem.clear()
+    if not routes:
+        raise ValueError(f"[PACT-1] no usable <route> entries in {rou_path}")
+
+    out = {}
+    for od, by_k in routes.items():
+        if sorted(by_k) != list(range(n_paths)):
+            continue                       # incomplete OD: cannot be described
+        out[od] = [by_k[k] for k in range(n_paths)]
+    if not out:
+        raise ValueError(
+            f"[PACT-1] {rou_path} has no OD pair with a complete set of "
+            f"{n_paths} routes."
+        )
+    return out
+
+
+def load_route_table(n_paths, env_ffts, explicit=None, candidates=(),
+                     search_roots=(), rou_candidates=()):
+    """Get {(o,d): [edge lists]} + {(o,d): [free-flow times]} from whatever this
+    RouteRL version left on disk.
+
+    Returns (routes_by_od, ffts_by_od, source_tag). ``source_tag`` is
+    ``'paths.csv'`` or ``'route.rou.xml'``; the caller uses it to decide whether
+    the route-order gate is meaningful (it is not for the xml, where the index is
+    encoded in the id and therefore correct by construction).
+    """
+    try:
+        p = find_paths_csv(explicit=explicit, candidates=candidates,
+                           search_roots=search_roots)
+        r, f = load_paths_csv(p, n_paths)
+        return r, f, "paths.csv"
+    except FileNotFoundError as first:
+        for rp in rou_candidates:
+            if rp and os.path.exists(rp):
+                try:
+                    r = load_routes_rou_xml(rp, n_paths)
+                except (ValueError, FileNotFoundError):
+                    continue
+                f = {}
+                for od in list(r.keys()):
+                    ff = env_ffts.get(od)
+                    if ff is None or len(ff) < n_paths:
+                        r.pop(od)
+                        continue
+                    f[od] = [float(v) for v in ff[:n_paths]]
+                if not r:
+                    continue
+                print(f"[PACT-1] route table: {os.path.abspath(rp)} "
+                      f"(paths.csv absent; free-flow times taken from the env)",
+                      flush=True)
+                return r, f, "route.rou.xml"
+        raise first
 
 
 # ==========================================================================

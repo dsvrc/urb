@@ -75,7 +75,7 @@ if not hasattr(_pact1_pkg, "__path__"):
         f"{repo_root!r} ahead of the scripts/ directory on sys.path."
     )
 
-from pact1.basis import RouteBasis, load_paths_csv, parse_sumo_net
+from pact1.basis import RouteBasis, load_route_table, parse_sumo_net
 from pact1.coordinator import Pact1Coordinator
 from pact1.policy import Pact1PPO, check_shift_parity
 
@@ -185,8 +185,14 @@ def main():
     parser.add_argument('--mode', type=str, default="train",
                         choices=["train", "dry", "probe"])
     parser.add_argument('--probe-eps', type=int, default=60)
+    parser.add_argument('--dry-human-eps', type=int, default=10,
+                        help="human-learning episodes in --mode dry (default 10; "
+                             "raise it if mutation needs more history)")
     parser.add_argument('--arm', type=str, default=None,
                         choices=["pact1", "blind", "fixed"])
+    parser.add_argument('--paths-csv', type=str, default=None,
+                        help="explicit path to RouteRL's route table, if the "
+                             "automatic search does not find it")
     args = parser.parse_args()
 
     exp_id, alg_config = args.id, args.alg_conf
@@ -333,8 +339,18 @@ def main():
     print_agent_counts(env)
 
     # ---------------------------------------------------------------- humans
+    # A dry run only checks wiring, and everything it checks (the route table, the
+    # basis, the gates) exists as soon as paths are generated and mutation has
+    # happened. Human convergence is irrelevant because it exits before any AV
+    # episode -- so don't pay 200 days for a check that takes seconds.
+    n_human = int(human_learning_episodes)                         # noqa: F821
+    if args.mode == "dry":
+        n_human = min(n_human, int(args.dry_human_eps))
+        print(f"[PACT-1] --mode dry: running only {n_human} human-learning episodes "
+              f"(of {human_learning_episodes}). This is a WIRING test, not a "      # noqa: F821
+              f"behavioural one.", flush=True)
     pbar = tqdm(total=total_episodes, desc="Human learning")
-    for _ in range(human_learning_episodes):                       # noqa: F821
+    for _ in range(n_human):
         env.step()
         pbar.update()
 
@@ -344,13 +360,31 @@ def main():
 
     # ================================================================ PACT-1
     net_path = os.path.join(custom_network_folder, f"{network}.net.xml")
-    paths_csv = os.path.join(records_folder, "paths.csv")
     print(f"\n[PACT-1] building the basis from\n"
-          f"         {os.path.abspath(net_path)}\n"
-          f"         {os.path.abspath(paths_csv)}", flush=True)
-
+          f"         {os.path.abspath(net_path)}", flush=True)
     net_edges = parse_sumo_net(net_path)
-    routes_by_od, ffts_by_od = load_paths_csv(paths_csv, int(number_of_paths))  # noqa: F821
+
+    # Where RouteRL leaves its generated route table depends on the version, so it
+    # is located rather than assumed (URB's own clustered pipeline dodges this by
+    # writing the file itself). route.rou.xml is the fallback: SUMO needs it, and
+    # its ids encode the action index directly.
+    free_flow = env.get_free_flow_times()
+    routes_by_od, ffts_by_od, route_src = load_route_table(
+        n_paths=int(number_of_paths),                              # noqa: F821
+        env_ffts=free_flow,
+        explicit=args.paths_csv,
+        candidates=[
+            os.path.join(records_folder, "paths.csv"),
+            os.path.join(records_folder, "routes.csv"),
+            os.path.join(custom_network_folder, "paths.csv"),
+            "paths.csv",
+        ],
+        search_roots=[records_folder, os.getcwd(), repo_root],
+        rou_candidates=[
+            os.path.join(records_folder, "route.rou.xml"),
+            os.path.join(custom_network_folder, "route.rou.xml"),
+        ],
+    )
     basis = RouteBasis(
         net_edges, routes_by_od, ffts_by_od, n_paths=int(number_of_paths),  # noqa: F821
         speed_bounds=tuple(pact_cfg.get("speed_bounds", (8.5, 14.0))),
@@ -369,16 +403,25 @@ def main():
         }
     av_ids = [_aid(a.id) for a in env.machine_agents]
 
-    free_flow = env.get_free_flow_times()
     # The diagnostic trace lands in the REPO ROOT by default (pact1.debug_dir
     # overrides), named with exp_id, so a multi-hour run can be tailed from one
     # place and parallel arms never collide.
     pact_cfg.setdefault("debug_dir", repo_root)
     coord = Pact1Coordinator(basis, agent_table, av_ids, free_flow, pact_cfg,
                              run_dir=records_folder, exp_id=exp_id)
-    coord.banner(extra=[f"exp_id     {exp_id}   net={network}   seed={env_seed}"])
-    coord.check_fft_alignment(free_flow,
-                              rtol=float(pact_cfg.get("fft_rtol", 1e-3)))
+    coord.banner(extra=[
+        f"exp_id     {exp_id}   net={network}   seed={env_seed}",
+        f"routes     from {route_src}",
+    ])
+    if route_src == "paths.csv":
+        coord.check_fft_alignment(free_flow,
+                                  rtol=float(pact_cfg.get("fft_rtol", 1e-3)))
+    else:
+        # route.rou.xml states the action index in the route id ({o}_{d}_{k}), so
+        # there is no row-order to permute and the free-flow times came from the
+        # env in the first place -- the gate would be comparing a value to itself.
+        print("[PACT-1] GATE 4 route-order alignment: SKIPPED (route ids encode the "
+              "action index directly, so no permutation is possible)", flush=True)
     coord.selfcheck()
 
     if args.mode == "dry":
