@@ -239,6 +239,32 @@ ablation table, not in the default.**
 
 ---
 
+## Interfacing with RouteRL (things that bite)
+
+Three RouteRL behaviours the implementation has to respect. All three are covered
+by `selftest.py`, so they cannot regress silently.
+
+**Records come from the episode CSVs, not from memory.** `env.travel_times_list`
+exists, but RouteRL snapshots *and resets* it inside `_reset_episode`, which runs
+during the last `env.step()` of a day — so whether a read afterwards returns today's
+rows or yesterday's is a library timing detail. `results/<exp_id>/episodes/ep<N>.csv`
+states which day it describes, so that is preferred and the source is **locked** on
+first success (mixing them would feed the estimator the same day twice).
+
+**Multi-day flushes are replayed per day.** RouteRL flushes every `save_every`
+episodes. Pooling a flush would pair day *t−4*'s travel time with day *t*'s peer
+waveform — invisible except as an inexplicably low `fit_r2`. `save_every` is
+forced to 1 for this arm (disk only, no dynamics).
+
+**The coordinator must never be deep-copied.** RouteRL deep-copies `all_agents`
+every episode reset, and each agent carries `agent.model` → the coordinator → the
+open debug-CSV handle. Without `__deepcopy__` returning `self`, that raises
+`cannot pickle 'TextIOWrapper'` and would also copy ~18 MB of Gram matrices per
+episode. Anything you attach to an agent must be deepcopy-safe and cheap.
+
+**RouteRL's episode numbers include the human-learning days**, so the offset is
+inferred once and trace rows are labelled in AV-training time.
+
 ## Honest limits — state all of these
 
 1. **T3 does not transfer.** There is no channel inverse in base URB; the method

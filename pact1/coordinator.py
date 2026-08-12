@@ -304,6 +304,30 @@ class Pact1Coordinator(object):
         "wall_s",
     ]
 
+    # ------------------------------------------------------------------ copying
+    def __deepcopy__(self, memo):
+        """Never copied -- this is a shared service, not agent state.
+
+        RouteRL snapshots ``all_agents`` with ``copy.deepcopy`` on every episode
+        reset. Each machine agent carries ``agent.model``, and the model holds a
+        reference to this coordinator, so without this the snapshot would try to
+        deepcopy:
+
+          * the open ``pact1_debug_*.csv`` handle -> TypeError: cannot pickle
+            'TextIOWrapper' instances, which kills the run at episode 0; and
+          * the whole basis -- three (R x R) Gram matrices, ~18 MB on
+            saint_arnoult -- once per episode, for nothing.
+
+        Returning ``self`` makes the snapshot share the coordinator instead, which
+        is both correct (a per-day record of an agent has no business owning a copy
+        of the fleet's estimator) and free.
+        """
+        memo[id(self)] = self
+        return self
+
+    def __copy__(self):
+        return self
+
     # ================================================================== banner
     def banner(self, extra=None):
         global _BANNER_SHOWN

@@ -432,6 +432,7 @@ def main():
     rng_probe = np.random.RandomState(env_seed + 7919)
     src = RecordSource(env, records_folder)
     seen_records = False
+    ep_offset = None                    # RouteRL day number -> AV-training day
     # Records only appear when RouteRL flushes, so the first ones can be a few days
     # late. Give the liveness check a grace period rather than failing on day 0.
     grace = max(int(save_every_eff) * 3, 12)
@@ -470,7 +471,18 @@ def main():
             env.step(action)
 
         n_bad = 0
-        for ep_label, records in src.drain(episode):
+        batches = src.drain(episode)
+        if batches and ep_offset is None:
+            # RouteRL numbers episodes from the start of the RUN, so its labels
+            # include the human-learning days; the loop counter starts at 0 here.
+            # Infer the offset once from the newest batch (with save_every=1 that
+            # is today) so trace rows and gate thresholds stay in AV-training time.
+            ep_offset = batches[-1][0] - episode
+            print(f"[PACT-1] RouteRL episode numbering offset by {ep_offset} "
+                  f"(its ep{batches[-1][0]} == AV-training day {episode})",
+                  flush=True)
+
+        for ep_label, records in batches:
             av_rec, peer_act, tt_hdv, n_bad = split_records(
                 records, machine_ids, RECORD_KEYS, _aid)
             if not av_rec:
@@ -480,8 +492,8 @@ def main():
                 # Cross-check the recorded actions against the ones we issued. If
                 # the id normalisation or the record schema were off, every
                 # waveform would describe a route nobody drove -- and nothing else
-                # would look wrong. Only meaningful when the labels line up.
-                if ep_label == episode and chosen:
+                # would look wrong.
+                if ep_label - (ep_offset or 0) == episode and chosen:
                     both = [a for a in chosen if a in peer_act]
                     agree = sum(1 for a in both if peer_act[a] == chosen[a])
                     print(f"[PACT-1] action cross-check: {agree}/{len(both)} "
@@ -513,7 +525,7 @@ def main():
             coord.end_episode(
                 av_rec, peer_act,
                 reward_mean=float(np.mean(rewards)) if rewards else float("nan"),
-                tt_hdv=tt_hdv, episode=ep_label,
+                tt_hdv=tt_hdv, episode=ep_label - (ep_offset or 0),
             )
 
         if (not seen_records) and episode >= grace:
@@ -577,7 +589,8 @@ def main():
                 coord.end_episode(
                     av_rec, peer_act,
                     reward_mean=float(np.mean(rewards)) if rewards else float("nan"),
-                    tt_hdv=tt_hdv, episode=ep_label, phase="test",
+                    tt_hdv=tt_hdv, episode=ep_label - (ep_offset or 0),
+                    phase="test",
                 )
         pbar.update()
 

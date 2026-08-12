@@ -119,15 +119,41 @@ class RecordSource(object):
 
     # ---------------------------------------------------------------- api
     def drain(self, episode):
-        """-> list of (episode_label, records). Usually length 0 or 1."""
-        recs, mode = self._drain_memory()
-        batches = [(episode, recs)] if recs else []
-        if not batches:
-            batches, mode = self._drain_csv()
-        if mode and self.mode != mode:
-            self.mode = mode
-            print(f"[PACT-1] travel-time records are coming from {mode}", flush=True)
-        return batches
+        """-> list of (episode_label, records). Usually length 0 or 1.
+
+        THE CSV IS PREFERRED, and the source is LOCKED once chosen.
+
+        Preferred because each file states which episode it describes. RouteRL
+        snapshots and resets ``travel_times_list`` inside ``_reset_episode``, which
+        runs during the last ``env.step()`` of a day -- so whether a read afterwards
+        returns today's rows or yesterday's is a timing detail of the library. The
+        CSV has no such ambiguity.
+
+        Locked because mixing the two would double-count: a day served from memory
+        and then served again when its file appears would feed the estimator the
+        same rows twice, which reads as a suspiciously confident beta and nothing
+        else. One source for the whole run, decided on the first success.
+        """
+        if self.mode == "memory":
+            recs, tag = self._drain_memory()
+            return [(episode, recs)] if recs else []
+        if self.mode == "csv":
+            return self._drain_csv()[0]
+
+        batches, tag = self._drain_csv()
+        if batches:
+            self.mode = "csv"
+            print(f"[PACT-1] travel-time records: {tag} "
+                  "(episode-labelled, authoritative)", flush=True)
+            return batches
+
+        recs, tag = self._drain_memory()
+        if recs:
+            self.mode = "memory"
+            print(f"[PACT-1] travel-time records: {tag} "
+                  "(no episode CSVs found; labelling by loop episode)", flush=True)
+            return [(episode, recs)]
+        return []
 
     def diagnose(self):
         """Everything a future fix would need, printed once. Cheap insurance

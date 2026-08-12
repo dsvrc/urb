@@ -576,6 +576,16 @@ class RouteBasis:
                     out[m, i, k] = s
         return out
 
+    def __deepcopy__(self, memo):
+        """Immutable shared geometry -- never copied. Defensive twin of
+        ``Pact1Coordinator.__deepcopy__``: the Gram matrices are ~18 MB on
+        saint_arnoult and nothing ever mutates them after construction."""
+        memo[id(self)] = self
+        return self
+
+    def __copy__(self):
+        return self
+
     def summary(self):
         return {
             "n_od": self.n_od,

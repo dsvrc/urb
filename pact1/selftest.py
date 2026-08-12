@@ -410,16 +410,69 @@ def test_records_from_episode_csvs_are_batched_per_day():
     assert np.isfinite(hdv), "human travel time not recovered"
 
 
-def test_records_prefers_memory_when_available():
+def test_records_fall_back_to_memory_and_lock_the_source():
+    """The CSV wins when present; memory is the fallback; the choice is LOCKED so a
+    day cannot be served twice (once from memory, again when its file lands)."""
+    import tempfile
     from pact1.records import RecordSource
 
     class Env:
         travel_times_list = [{"id": 1, "action": 2, "travel_time": 9.0}]
 
-    src = RecordSource(Env(), "/nonexistent")
+    base = tempfile.mkdtemp()
+    src = RecordSource(Env(), base)
     b = src.drain(episode=7)
+    assert src.mode == "memory", f"expected the memory fallback, got {src.mode!r}"
     assert len(b) == 1 and b[0][0] == 7, "memory batch mislabelled"
     assert src.drain(episode=8) == [], "cumulative list re-read from the start"
+
+    # a CSV appearing later must NOT be picked up: the source is locked
+    _write_ep_csv(os.path.join(base, "episodes"), 1,
+                  [{"id": 1, "action": 2, "travel_time": 9.0}])
+    assert src.drain(episode=9) == [], "source switched mid-run -> double counting"
+
+
+def test_records_prefer_csv_over_memory():
+    import tempfile
+    from pact1.records import RecordSource
+
+    class Env:
+        travel_times_list = [{"id": 1, "action": 2, "travel_time": 9.0}]
+
+    base = tempfile.mkdtemp()
+    _write_ep_csv(os.path.join(base, "episodes"), 5,
+                  [{"id": 1, "action": 3, "travel_time": 42.0}])
+    src = RecordSource(Env(), base)
+    b = src.drain(episode=99)
+    assert src.mode == "csv", f"CSV should win when present, got {src.mode!r}"
+    assert b[0][0] == 5, "CSV batch must be labelled with ITS episode, not the loop's"
+
+
+def test_coordinator_and_basis_survive_deepcopy():
+    """RouteRL deepcopies ``all_agents`` on every episode reset, and each agent
+    carries ``agent.model`` -> the coordinator -> an OPEN CSV handle. Without the
+    __deepcopy__ short-circuit that raises "cannot pickle 'TextIOWrapper'" and
+    kills the run, and it would also copy ~18 MB of Gram matrices per episode."""
+    import copy
+    import tempfile
+    from pact1.coordinator import Pact1Coordinator
+
+    net, routes, ffts = _toy_city(seed=2, n_od=4, K=4)
+    basis = RouteBasis(net, routes, ffts, n_paths=4, verbose=False)
+    at = {str(i): {"od": (i % 4, i % 4), "start": float(i * 10), "machine": True}
+          for i in range(8)}
+    cfg = dict(gate_abort=False, print_every=0, peer_scope="fleet",
+               debug_dir=tempfile.mkdtemp())
+    coord = Pact1Coordinator(basis, at, list(at), {od: ffts[od] for od in ffts},
+                             cfg, run_dir=None, exp_id="dc_demo")
+    assert coord._dbg is not None, "test is vacuous without an open file handle"
+
+    holder = {"agents": [{"model": {"coord": coord}} for _ in range(4)]}
+    dup = copy.deepcopy(holder)                    # must not raise
+    assert dup["agents"][0]["model"]["coord"] is coord, \
+        "the coordinator was copied instead of shared"
+    assert copy.deepcopy(basis) is basis, "the basis was copied instead of shared"
+    coord.close()
 
 
 def test_records_handle_both_key_shapes():
