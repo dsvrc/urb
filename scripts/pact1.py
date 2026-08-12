@@ -60,6 +60,21 @@ from utils import run_metrics_analysis
 from utils import save_loss_records
 from utils import script_path_for_config
 
+import pact1 as _pact1_pkg
+
+# This script is `scripts/pact1.py` and the package is `pact1/`, so the two share a
+# name. The sys.path insert above puts the repo root ahead of scripts/, which
+# resolves it -- but if that ever stops holding, `import pact1.basis` fails with
+# "'pact1' is not a package", which reads like a missing install rather than a
+# shadowing problem. Say what actually happened instead.
+if not hasattr(_pact1_pkg, "__path__"):
+    raise ImportError(
+        f"[PACT-1] `import pact1` resolved to {getattr(_pact1_pkg, '__file__', '?')} "
+        "-- this script, not the package.\n"
+        f"        Run it as `python scripts/pact1.py` from the repo, or put "
+        f"{repo_root!r} ahead of the scripts/ directory on sys.path."
+    )
+
 from pact1.basis import RouteBasis, load_paths_csv, parse_sumo_net
 from pact1.coordinator import Pact1Coordinator
 from pact1.policy import Pact1PPO, check_shift_parity
@@ -70,6 +85,34 @@ ALGORITHM = "pact1"
 # ==========================================================================
 #  RouteRL record plumbing
 # ==========================================================================
+def load_config(folder, name, what):
+    """Load a URB config, and on a miss say what IS available.
+
+    URB's own README advertises ``--task-conf config4``, which this distribution
+    does not ship -- so the first thing a new script hits is a bare
+    FileNotFoundError from deep inside the parameter block. Listing the candidates
+    turns a two-minute puzzle into a one-line fix, and matters more here because
+    the run is remote.
+    """
+    path = os.path.join(folder, f"{name}.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    try:
+        avail = sorted(f[:-5] for f in os.listdir(folder) if f.endswith(".json"))
+    except OSError:
+        raise FileNotFoundError(
+            f"[PACT-1] {what} directory does not exist: {os.path.abspath(folder)}"
+        ) from None
+    raise FileNotFoundError(
+        f"[PACT-1] {what} {name!r} not found in {os.path.abspath(folder)}.\n"
+        f"        Available: {', '.join(avail) if avail else '(none)'}\n"
+        f"        NOTE: whatever you pick, every arm -- PACT-1 and the QMIX/IPPO/\n"
+        f"        greedy/AON baselines -- must use the SAME task config, or the\n"
+        f"        comparison measures the scenario rather than the method."
+    )
+
+
 def _aid(v):
     """Normalise an agent id to a string of an int, so ``5``, ``5.0`` and ``'5'``
     all key the same dict. Mixed id types across RouteRL's records and the agent
@@ -175,9 +218,11 @@ def main():
 
     # ---------------------------------------------------------------- config
     params = dict()
-    alg_params = json.load(open(f"../config/algo_config/{ALGORITHM}/{alg_config}.json"))
-    env_params = json.load(open(f"../config/env_config/{env_config}.json"))
-    task_params = json.load(open(f"../config/task_config/{task_config}.json"))
+    alg_params = load_config(f"../config/algo_config/{ALGORITHM}", alg_config,
+                             "algorithm config")
+    env_params = load_config("../config/env_config", env_config,
+                             "environment config")
+    task_params = load_config("../config/task_config", task_config, "task config")
     params.update(alg_params)
     params.update(env_params)
     params.update(task_params)
