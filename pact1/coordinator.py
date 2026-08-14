@@ -232,6 +232,10 @@ class Pact1Coordinator(object):
         self.x_ref = xr / float(self.K)
         s = np.abs(self.x_ref).mean(axis=(1, 2))
         self.x_scale = np.where(s > 1e-9, s, 1.0)
+        # Per-channel spread, computable before a single episode runs. A channel
+        # with ~zero variation is a constant, hence collinear with the intercept,
+        # hence unidentifiable -- and it makes cond(E[psi psi^T]) infinite.
+        self.chan_var = basis.channel_variation(self.x_ref)
 
         # ---- method state ------------------------------------------------------
         self.rls = [AgentRLS(self.p, self.mu, self.p0) for _ in range(self.n_av)]
@@ -298,7 +302,7 @@ class Pact1Coordinator(object):
         # fit_gain is the one to read: fit_r2 MINUS an intercept-only model. Raw
         # fit_r2 is inflated by the per-agent intercept memorising each traveller's
         # typical delay (see end_episode).
-        "fit_r2", "fit_base_r2", "fit_gain", "pred_r2", "fit_mae", "pred_mae",
+        "fit_r2", "fit_base_r2", "fit_gain", "pred_r2", "pred_gain", "fit_mae", "pred_mae",
         "cond_psi",
         # excitation / liveness
         "x_local", "x_collector", "x_arterial", "x_std",
@@ -388,6 +392,11 @@ class Pact1Coordinator(object):
               f"per class\n"
               f"             x_ref mean {np.round(self.x_ref.mean(axis=(1, 2)), 4).tolist()}  "
               f"x_scale {np.round(self.x_scale, 4).tolist()}")
+        print(f"             channel spread (std/|mean|) "
+              f"{dict(zip(s['class_names'], np.round(self.chan_var, 5).tolist()))}")
+        if s["dropped_channels"]:
+            print(f"             DROPPED by config: {s['dropped_channels']} -> "
+                  f"r={self.r}. Report this; it is a change of model class.")
         print(f"  agents     {self.n_av} machine of {self.n_all} travellers")
         if self.freeze_beta is not None:
             print(f"  [ABLATION] freeze_beta={self.freeze_beta}: estimator BYPASSED")
@@ -468,6 +477,26 @@ class Pact1Coordinator(object):
             f"GATE 3 zero-diagonal (N=1) : {'PASS' if ok3 else 'FAIL'} "
             "(a lone traveller reads exactly zero peer load)"
         )
+
+        # --- GATE 3b: is every channel actually identifiable? -------------------
+        # Costs nothing and answers, before the run, the question that cost the
+        # first campaign a `cond == inf` it only discovered afterwards.
+        names = self.basis.channel_names
+        dead = [names[m] for m in range(self.r)
+                if self.chan_var[m] < float(self.cfg.get("min_channel_var", 1e-3))]
+        out.append(
+            f"GATE 3b channel spread     : {'PASS' if not dead else 'DEGENERATE'} "
+            f"{dict(zip(names, np.round(self.chan_var, 5).tolist()))}"
+        )
+        if dead:
+            out.append(
+                f"        channel(s) {dead} never vary -> collinear with the "
+                "intercept, cond = inf, and one wasted parameter.\n"
+                "        The prediction still works, but the per-class SPLIT is "
+                "meaningless. Either report r lower, or set\n"
+                f"        pact1.drop_channels to remove "
+                f"{[names.index(d) for d in dead]} and re-run."
+            )
 
         for line in out:
             print("[PACT-1] " + line, flush=True)
@@ -682,7 +711,7 @@ class Pact1Coordinator(object):
 
         drove = np.nonzero(act_of >= 0)[0]
         fit_r2 = pred_r2 = fit_mae = pred_mae = cond_psi = float("nan")
-        base_r2 = fit_gain = float("nan")
+        base_r2 = fit_gain = pred_gain = float("nan")
         clip_frac = float("nan")
         excess_mean = float("nan")
 
@@ -723,6 +752,11 @@ class Pact1Coordinator(object):
             fit_gain = (fit_r2 - base_r2
                         if np.isfinite(fit_r2) and np.isfinite(base_r2)
                         else float("nan"))
+            # pred_r2 carries exactly the same intercept inflation, so it needs the
+            # same baseline. pred_gain is what the FORECAST adds over a constant.
+            pred_gain = (pred_r2 - base_r2
+                         if np.isfinite(pred_r2) and np.isfinite(base_r2)
+                         else float("nan"))
 
             # --- identify -------------------------------------------------------
             if self.freeze_beta is None:
@@ -749,7 +783,7 @@ class Pact1Coordinator(object):
         herd = herd_index(counts) if counts is not None else float("nan")
 
         self._write_row(
-            n_peer_valid, drove.size, x_true, fit_r2, base_r2, fit_gain, pred_r2,
+            n_peer_valid, drove.size, x_true, fit_r2, base_r2, fit_gain, pred_r2, pred_gain,
             fit_mae, pred_mae, cond_psi, np.nanmean(tt_of), tt_hdv, reward_mean,
             excess_mean, clip_frac, switch, herd,
         )
@@ -757,8 +791,8 @@ class Pact1Coordinator(object):
 
     # ------------------------------------------------------------------ logging
     def _write_row(self, n_peer_valid, n_drove, x_true, fit_r2, base_r2, fit_gain,
-                   pred_r2, fit_mae, pred_mae, cond_psi, tt_cav, tt_hdv, reward,
-                   excess_mean, clip_frac, switch, herd):
+                   pred_r2, pred_gain, fit_mae, pred_mae, cond_psi, tt_cav, tt_hdv,
+                   reward, excess_mean, clip_frac, switch, herd):
         B = np.array([self._beta(i) for i in range(self.n_av)])
         seen = self._trust_seen
         tp = float(np.mean(self._trust_log[seen, 0])) if seen.any() else float("nan")
@@ -778,15 +812,23 @@ class Pact1Coordinator(object):
         tt_cav_roll = float(np.mean(self._roll_cav)) if self._roll_cav else float("nan")
         cav_adv_roll = float(np.mean(self._roll_adv)) if self._roll_adv else float("nan")
 
-        xm = [float(np.mean(np.abs(x_true[m]))) for m in range(self.r)]
+        # Pad to the fixed 3-channel CSV layout so a pruned basis (r < 3) still
+        # lines up column-for-column with an unpruned run: a dropped channel
+        # reads as blank, not as a shifted neighbour.
+        xm = [float("nan")] * 3
+        bm = [float("nan")] * 3
+        for j, m in enumerate(self.basis.kept):
+            xm[m] = float(np.mean(np.abs(x_true[j])))
+            bm[m] = float(B[:, j + 1].mean())
+
         row = [
             self._ep, self._phase, int(n_drove), self.n_peer, int(n_peer_valid),
-            _r(B[:, 0].mean(), 6), _r(B[:, 1].mean(), 6), _r(B[:, 2].mean(), 6),
-            _r(B[:, 3].mean(), 6), _r(B[:, 1:].std(0).mean(), 6),
+            _r(B[:, 0].mean(), 6), _r(bm[0], 6), _r(bm[1], 6), _r(bm[2], 6),
+            _r(B[:, 1:].std(0).mean(), 6),
             _r(np.mean([e.innov for e in self.rls]), 6),
             _r(float(np.mean(self.conf)), 5),
             int(np.sum([e.n_updates for e in self.rls])),
-            _r(fit_r2, 5), _r(base_r2, 5), _r(fit_gain, 5), _r(pred_r2, 5),
+            _r(fit_r2, 5), _r(base_r2, 5), _r(fit_gain, 5), _r(pred_r2, 5), _r(pred_gain, 5),
             _r(fit_mae, 6), _r(pred_mae, 6), _r(cond_psi, 2),
             _r(xm[0], 6), _r(xm[1], 6), _r(xm[2], 6),
             _r(float(np.std(x_true)), 6),

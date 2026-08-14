@@ -325,6 +325,7 @@ class RouteBasis:
         speed_bounds=DEFAULT_SPEED_BOUNDS,
         min_class_share=0.03,
         max_basis_mb=4000.0,
+        drop_channels=(),
         verbose=True,
     ):
         self.n_paths = int(n_paths)
@@ -415,6 +416,44 @@ class RouteBasis:
                 self.G[m] = self.G[m] / self.g_scale[m]
 
         self.class_share = self._class_share(A, length)
+
+        # ---- explicit channel pruning ------------------------------------------
+        # A road class that no route's peer load ever VARIES over is exactly
+        # collinear with the intercept: the design matrix is singular, cond is
+        # infinite, and one parameter is wasted estimating a constant. Measured on
+        # saint_arnoult, the arterial channel is exactly this -- x_arterial sat at
+        # 0.00796 from the first episode to the last.
+        #
+        # Pruning is DECLARED, never automatic: dropping a channel changes the model
+        # class, so it has to be a stated choice in the config rather than something
+        # the code decides quietly on your behalf. `channel_variation` below tells
+        # you which one to drop.
+        self.channel_names = list(CLASS_NAMES)
+        self.dropped = sorted({int(m) for m in drop_channels if 0 <= int(m) < 3})
+        if self.dropped:
+            keep = [m for m in range(3) if m not in self.dropped]
+            self.G = [self.G[m] for m in keep]
+            self.g_scale = self.g_scale[keep]
+            self.channel_names = [CLASS_NAMES[m] for m in keep]
+            self.kept = keep
+        else:
+            self.kept = list(range(3))
+        self.r = len(self.G)
+
+    def channel_variation(self, x):
+        """Per-channel relative spread of a waveform stack ``x`` of shape (r, ...).
+
+        ``std / mean|.|`` per channel. A value near zero means that channel is a
+        constant, hence collinear with the intercept, hence unidentifiable -- the
+        thing to check BEFORE spending a run, not after reading cond == inf.
+        """
+        x = np.asarray(x, dtype=np.float64)
+        out = []
+        for m in range(x.shape[0]):
+            xm = x[m].reshape(-1)
+            denom = float(np.mean(np.abs(xm)))
+            out.append(float(np.std(xm)) / denom if denom > 1e-12 else 0.0)
+        return np.array(out)
 
     # ------------------------------------------------------------------ classes
     def _classify(self, speed, length, A, min_class_share, verbose):
@@ -594,7 +633,9 @@ class RouteBasis:
             "n_edges_used": self.E,
             "missing_edge_frac": round(self.missing_frac, 6),
             "speed_bounds_mps": [round(float(b), 3) for b in self.speed_bounds],
-            "class_names": list(CLASS_NAMES),
+            "class_names": list(self.channel_names),
+            "dropped_channels": [CLASS_NAMES[m] for m in self.dropped],
+            "r": self.r,
             "class_length_share": [round(float(s), 4) for s in self.class_share],
             "g_scale": [round(float(s), 6) for s in self.g_scale],
             "fallback_tertiles": bool(self.fallback_used),

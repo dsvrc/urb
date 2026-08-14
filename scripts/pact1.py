@@ -364,6 +364,7 @@ def main():
         speed_bounds=tuple(pact_cfg.get("speed_bounds", (8.5, 14.0))),
         min_class_share=float(pact_cfg.get("min_class_share", 0.03)),
         max_basis_mb=float(pact_cfg.get("max_basis_mb", 4000.0)),
+        drop_channels=tuple(pact_cfg.get("drop_channels", ())),
     )
 
     machine_ids = {_aid(a.id) for a in env.machine_agents}

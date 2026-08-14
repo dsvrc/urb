@@ -40,6 +40,8 @@
         "overlap_slack": 0.0,
         "speed_bounds": [8.5, 14.0],
         "min_class_share": 0.03,
+        "min_channel_var": 0.001,
+        "drop_channels": [],
         "y_clip": 10.0,
 
         "freeze_beta": null,

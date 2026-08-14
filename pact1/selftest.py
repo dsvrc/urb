@@ -337,6 +337,67 @@ def test_basis_zero_diagonal_and_N1():
     assert np.max(np.abs(w)) < 1e-12, f"lone traveller sees load {np.max(np.abs(w)):.3e}"
 
 
+def test_channel_pruning_keeps_everything_aligned():
+    """Dropping a degenerate channel must reduce r, keep the SURVIVING channels'
+    geometry byte-identical, and leave the CSV columns aligned so a pruned run can
+    sit next to an unpruned one in the same table."""
+    import tempfile
+    from pact1.coordinator import Pact1Coordinator
+
+    net, routes, ffts = _toy_city(seed=2, n_od=4, K=4)
+    full = RouteBasis(net, routes, ffts, n_paths=4, verbose=False)
+    cut = RouteBasis(net, routes, ffts, n_paths=4, drop_channels=(2,), verbose=False)
+
+    assert full.r == 3 and cut.r == 2, f"r not reduced: {full.r} -> {cut.r}"
+    assert cut.kept == [0, 1], f"wrong channels kept: {cut.kept}"
+    for j, m in enumerate(cut.kept):
+        assert np.allclose(cut.G[j], full.G[m]), \
+            f"surviving channel {m} changed under pruning"
+
+    at = {str(i): {"od": (i % 4, i % 4), "start": float(i * 7), "machine": True}
+          for i in range(12)}
+    out = tempfile.mkdtemp()
+    coord = Pact1Coordinator(cut, at, list(at), {od: ffts[od] for od in ffts},
+                             dict(gate_abort=False, print_every=0,
+                                  peer_scope="fleet", debug_dir=out,
+                                  gate_after_episodes=10 ** 9,
+                                  gate_live_after_episodes=10 ** 9),
+                             run_dir=None, exp_id="prune_demo")
+    assert coord.p == 3, f"parameter count not reduced: p={coord.p}"
+
+    rng = np.random.RandomState(0)
+    for ep in range(5):
+        coord.begin_episode(ep)
+        acts = {a: int(rng.randint(4)) for a in at}
+        recs = {a: (acts[a], float(coord.agent_fft[i, acts[a]] * 1.2))
+                for i, a in enumerate(at)}
+        coord.end_episode(recs, acts)
+    coord.close()
+
+    import pandas as pd
+    df = pd.read_csv(coord.debug_path)
+    assert len(df.columns) == len(Pact1Coordinator.COLUMNS), "column count drifted"
+    assert df["x_arterial"].isna().all(), \
+        "the dropped channel should be blank, not a shifted neighbour"
+    assert df["x_local"].notna().any() and df["x_collector"].notna().any(), \
+        "surviving channels lost their columns"
+
+
+def test_channel_variation_flags_a_constant_channel():
+    """The startup spread check must catch a channel that never varies -- that is
+    what makes cond infinite, and it is knowable before spending a run."""
+    net, routes, ffts = _toy_city(seed=2, n_od=4, K=4)
+    b = RouteBasis(net, routes, ffts, n_paths=4, verbose=False)
+    x = np.stack([
+        np.random.RandomState(0).rand(4, 4),      # varies
+        np.random.RandomState(1).rand(4, 4),      # varies
+        np.full((4, 4), 0.00796),                 # constant -- the real failure
+    ])
+    v = b.channel_variation(x)
+    assert v[0] > 0.1 and v[1] > 0.1, f"live channels flagged dead: {v}"
+    assert v[2] < 1e-9, f"constant channel not flagged: {v[2]:.3e}"
+
+
 def test_basis_classes_nondegenerate():
     net, routes, ffts = _toy_city()
     b = RouteBasis(net, routes, ffts, n_paths=4, verbose=False)
