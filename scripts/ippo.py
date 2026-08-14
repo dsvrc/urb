@@ -65,7 +65,15 @@ class PPO(BaseLearningModel):
         else: action = torch.argmax(probs).item()
         self.last_state = state
         self.last_action = action
-        self.last_log_prob = dist.log_prob(torch.tensor(action)).item()
+        # `dist` lives on self.device, so the action index must too -- on CUDA a
+        # bare torch.tensor(action) is created on the CPU and Categorical.log_prob
+        # raises "Expected all tensors to be on the same device". Every other
+        # variant in this repo already does this (ippo_clusters.py, centralized_
+        # wrapper.py); only this file was missed, which is why it runs on CPU and
+        # dies on GPU.
+        self.last_log_prob = dist.log_prob(
+            torch.tensor(action, device=self.device)
+        ).item()
         return action
 
     def push(self, reward):
