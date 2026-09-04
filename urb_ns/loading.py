@@ -107,14 +107,49 @@ class LoadingModel(object):
             contrib = contrib * np.asarray(weight, float)[:, None]
         return contrib
 
-    def loading(self, choice, g=1.0, subset=None):
+    def co_presence(self, offsets=None, slack=0.0, row_shift=0.0):
+        """Temporal overlap, optionally with per-traveller DEPARTURE OFFSETS.
+
+        `row_shift` moves ONLY the row agent's own interval, leaving every peer
+        where it was. That is what a PARTIAL derivative needs: co-presence is
+        translation-invariant, so shifting everyone together changes nothing at
+        all, and a finite difference taken that way is exactly zero. (Which is also
+        the physical statement that a uniform departure shift across the whole
+        fleet accomplishes nothing -- the compensation has to be DIFFERENTIAL, and
+        that is the commons in miniature.)
+
+        With `offsets=None` this is the fixed schedule matrix built once at
+        construction. With offsets it is recomputed, which is what makes departure
+        time a control input: shifting when you travel changes who you share the
+        road with, hence your loading.
+
+        It is also what makes the channel LOOP-COUPLED (A.6) -- your offset moves
+        every peer's co-presence too, so compensating feeds the medium it
+        compensates against. Everyone leaving earlier rebuilds the peak; that is
+        the Vickrey bottleneck, and it is why T4 applies here.
+        """
+        if offsets is None and not row_shift:
+            return self.O
+        off = (np.zeros(self.N) if offsets is None
+               else np.asarray(offsets, dtype=np.float64))
+        T = np.maximum(np.nanmean(self.ffts, axis=1) * 60.0, 0.0)  # min -> s
+        s_col = self.start + off                 # peers, at their own departures
+        e_col = s_col + T + float(slack)
+        s_row = s_col + float(row_shift)         # ROW ONLY: agent i, shifted
+        e_row = s_row + T + float(slack)
+        return ((s_row[:, None] <= e_col[None, :])
+                & (s_col[None, :] <= e_row[:, None])).astype(np.float64)
+
+    def loading(self, choice, g=1.0, subset=None, offsets=None, row_shift=0.0):
         """`u_i` for every AV: the binding link's flow-to-capacity ratio.
 
         Args:
-            choice: (N,) executed route option per traveller.
-            g:      capacity multiplier from the driver (scalar or (E,)).
-            subset: optional bool (N,) restricting WHICH travellers contribute
-                    load. Used by Part C to attribute the excess.
+            choice:  (N,) executed route option per traveller.
+            g:       capacity multiplier from the driver (scalar or (E,)).
+            subset:  optional bool (N,) restricting WHICH travellers contribute
+                     load. Used by Part C to attribute the excess.
+            offsets: optional (N,) departure shifts in seconds -- the compensation
+                     channel.
 
         Returns (u, binding_link) with `u` shape (N,) and the argmax link index.
         """
@@ -124,7 +159,8 @@ class LoadingModel(object):
             contrib = contrib * np.asarray(subset, bool)[:, None]
 
         # vehicles co-present with i, on each link
-        veh = self.O @ contrib                                 # (N, E)
+        O = self.co_presence(offsets, row_shift=row_shift)
+        veh = O @ contrib                                      # (N, E)
         own = self.link_flow(choice)                           # i's own row
         if subset is None:
             veh = veh - own                                    # strict j != i
@@ -182,7 +218,28 @@ class LoadingModel(object):
         b = self.bpr_beta if beta is None else float(beta)
         return 1.0 + a * u ** b
 
-    def delay_multiplier(self, choice, g, alpha=None, beta=None):
+    def du_d_offset(self, choice, g, offsets=None, h=30.0):
+        """`du_i / d(offset_i)` from the DECLARED model, by central difference.
+
+        `PACT_PIPELINE_SPEC` §6.1 [PAID] is emphatic that this divisor must come
+        from the operator and NOT be learned:
+
+        > Learning it failed completely: own_gain = 0.13 with se = 5.0, i.e.
+        > |t| = 0.024, never once clearing a t > 3 bar in 5004 windows, because
+        > excitation dies as the policy converges.
+
+        Here the whole loading model is declared -- network geometry plus a fixed
+        schedule -- so the sensitivity is available analytically. `h` is the finite
+        -difference step in seconds; co-presence is a step function of interval
+        overlap, so `h` must be large enough to move at least one peer across the
+        boundary. Declared constant.
+        """
+        base = np.zeros(self.N) if offsets is None else np.asarray(offsets, float)
+        up, _ = self.loading(choice, g=g, offsets=base, row_shift=+h)
+        dn, _ = self.loading(choice, g=g, offsets=base, row_shift=-h)
+        return (up - dn) / (2.0 * h)
+
+    def delay_multiplier(self, choice, g, alpha=None, beta=None, offsets=None):
         """How much longer the trip takes under the dial than at `sigma = 0`.
 
             m_i = BPR(u_i under derated capacity) / BPR(u_i at nominal capacity)
@@ -191,8 +248,8 @@ class LoadingModel(object):
         the stock task is recovered byte for byte at `sigma = 0` and on every dry
         day. That identity is why the placebo regime is free.
         """
-        u_g, binding = self.loading(choice, g=g)
-        u_0, _ = self.loading(choice, g=1.0)
+        u_g, binding = self.loading(choice, g=g, offsets=offsets)
+        u_0, _ = self.loading(choice, g=1.0, offsets=offsets)
         return self.bpr(u_g, alpha, beta) / self.bpr(u_0, alpha, beta), u_g, binding
 
     def operating_point(self, g=1.0, n_draws=8, seed=0, alpha=None, beta=None,
