@@ -114,6 +114,28 @@ def test_null_model_detects_a_real_peer_contribution():
     assert fg > 0.3, f"fit_gain {fg:.4f} failed to see a genuine peer term"
 
 
+def test_fit_gain_stays_bounded_on_a_near_constant_target():
+    """[PAID] reproduction of the first URB NS runs.
+
+    The loading ratio barely moves once the policy converges. With the R2 form
+    `R2(full) - R2(null)`, both terms divide by that vanishing variance, each blows
+    up hugely negative, and the DIFFERENCE came out at 42, 156 and 870 -- for a
+    quantity that must lie near [-1, 1]. The gate then read admissible 97.5% of the
+    time and ran a whole 4000-day arm on nonsense.
+
+    Normalising by the null's own error instead keeps it bounded whatever the
+    target variance is.
+    """
+    rng = np.random.RandomState(11)
+    nt = NullTracker(window=300, warmup=5)
+    for _ in range(400):
+        y = 0.22 + 1e-6 * rng.randn()          # a target with essentially no variance
+        nt.add(y, y + 0.01 * rng.randn(), y + 0.02 * rng.randn())
+    fg = nt.fit_gain()
+    assert np.isfinite(fg), "fit_gain went non-finite on a near-constant target"
+    assert -1.0 <= fg <= 1.0, f"fit_gain = {fg:.4f} escaped [-1, 1]"
+
+
 def test_null_tracker_is_windowed_not_cumulative():
     """§8.2: a cumulative lift is held down forever by early negatives, so the
     compensator never re-arms after a bad start."""

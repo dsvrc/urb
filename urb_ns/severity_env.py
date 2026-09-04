@@ -112,6 +112,11 @@ class SeverityLayer(object):
         if day is not None:
             self.day = int(day)
         self._A = float(self.driver.A(self.day))
+        # Latched HERE, not read back later: `end_episode` advances the counter, so
+        # a diagnostic that queried `is_dry()` afterwards would describe TOMORROW.
+        # That misaligned the placebo column by one day in the first NS runs.
+        self._day_of_harm = int(self.day)
+        self._dry = bool(self.driver.is_dry(self.day))
         self._g = np.asarray(
             self.driver.g(self.day, self.sigma, sens=self.net.rain_sens),
             dtype=np.float64)
@@ -165,7 +170,9 @@ class SeverityLayer(object):
         return self._A
 
     def is_dry(self):
-        return bool(self.driver.is_dry(self.day))
+        """Was the day whose harm is currently latched a dry one? Reads the day of
+        the HARM, not the counter, which `end_episode` has already advanced."""
+        return bool(getattr(self, "_dry", self.driver.is_dry(self.day)))
 
     def excess(self):
         """`u * (1 - g_binding)` -- the loading excess of C.1, per traveller. This
@@ -177,7 +184,8 @@ class SeverityLayer(object):
     def diagnostics(self):
         av = self.loading.is_machine
         return {
-            "day": int(self.day), "A": float(self._A),
+            "day": int(getattr(self, "_day_of_harm", self.day)),
+            "A": float(self._A),
             "g_min": float(np.min(self._g)) if self._g is not None else 1.0,
             "g_mean": float(np.mean(self._g)) if self._g is not None else 1.0,
             "dry": int(self.is_dry()),

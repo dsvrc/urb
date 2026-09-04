@@ -128,16 +128,35 @@ class NullTracker(object):
                 del buf[0]
 
     def fit_gain(self):
-        """R2(full) - R2(intercept+own). Positive means the PEER channels earn
-        their place; near zero means they are decoration."""
+        """Fraction of the NULL model's error that the peer channels remove.
+
+            fit_gain = 1 - SSE(full) / SSE(null)
+
+        ** NOT a difference of R-squared. ** [PAID]
+
+        The R2 form `R2(full) - R2(null)` divides both terms by the target's own
+        variance, and the target here is a loading ratio that barely moves once the
+        policy converges. Measured on the first URB NS runs: SST went small while
+        both SSE stayed finite, so each R2 blew up hugely negative and their
+        DIFFERENCE came out at 42, 156 and 870 -- values that are impossible for a
+        quantity bounded near [-1, 1]. The admissibility gate then read 0.975 and
+        admitted on nonsense for an entire 4000-day run.
+
+        Normalising by the null model's error instead is bounded above by 1,
+        negative exactly when the peer channels make prediction worse, and stable
+        however little the target varies -- because SSE(null) only approaches zero
+        when the null is already perfect, in which case there is genuinely nothing
+        left for the peer term to explain.
+        """
         if len(self._y) < max(20, self.dim_min):
             return float("nan")
         y = np.asarray(self._y)
-        sst = float(np.sum((y - y.mean()) ** 2))
-        if sst < 1e-12:
-            return float("nan")
-        r2 = lambda p: 1.0 - float(np.sum((y - np.asarray(p)) ** 2)) / sst
-        return r2(self._full) - r2(self._null)
+        sse_full = float(np.sum((y - np.asarray(self._full)) ** 2))
+        sse_null = float(np.sum((y - np.asarray(self._null)) ** 2))
+        scale = max(sse_null, 1e-12 * max(1.0, float(np.sum(y * y))))
+        if sse_null <= 0.0 or scale <= 0.0:
+            return float("nan")            # the null is already exact
+        return float(np.clip(1.0 - sse_full / scale, -1.0, 1.0))
 
     dim_min = 20
 
