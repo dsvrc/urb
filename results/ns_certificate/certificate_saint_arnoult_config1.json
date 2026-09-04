@@ -1,0 +1,86 @@
+{
+  "net": "saint_arnoult",
+  "task_conf": "config1",
+  "network": {
+    "n_od": 215,
+    "n_paths": 4,
+    "n_routes": 860,
+    "n_links": 745,
+    "missing_link_frac": 0.0,
+    "cap_min": 600.0,
+    "cap_max": 1800.0,
+    "cap_median": 600.0,
+    "op_spread": 0.963,
+    "asymmetry": 0.4068,
+    "sat_flow": 600.0
+  },
+  "phi_spread": 0.4787597171763127,
+  "phi_ok": true,
+  "operator_ok": true,
+  "dial_ok": true,
+  "driver": {
+    "period": 100,
+    "wet_frac": 0.5,
+    "loss": 0.14,
+    "mean_preserving": false,
+    "anchor": "HCM heavy-rain capacity adjustment factor"
+  },
+  "ceiling": [
+    {
+      "sigma": 1.0,
+      "n_av": 89,
+      "degenerate": false,
+      "irreducible": 0.42648033755289677,
+      "own": 0.16533720129510535,
+      "peer": 0.4081824611519979,
+      "decentralized_ceiling": 0.5735196624471033,
+      "non_coordinating_ceiling": 0.16533720129510532,
+      "coordination_gap": 0.4081824611519979,
+      "delta_total": 1.5927617572802932,
+      "n_cells": 294
+    },
+    {
+      "sigma": 2.0,
+      "n_av": 89,
+      "degenerate": false,
+      "irreducible": 0.4256149282205414,
+      "own": 0.1671834955727508,
+      "peer": 0.40720157620670777,
+      "decentralized_ceiling": 0.5743850717794585,
+      "non_coordinating_ceiling": 0.1671834955727508,
+      "coordination_gap": 0.40720157620670777,
+      "delta_total": 3.7106806454441554,
+      "n_cells": 294
+    }
+  ],
+  "gap_vs_share": [
+    {
+      "sigma": 2.0,
+      "n_av": 89,
+      "degenerate": false,
+      "irreducible": 0.4259094833055598,
+      "own": 0.16878594131646316,
+      "peer": 0.405304575377977,
+      "decentralized_ceiling": 0.5740905166944402,
+      "non_coordinating_ceiling": 0.16878594131646318,
+      "coordination_gap": 0.405304575377977,
+      "delta_total": 3.6613361091224887,
+      "n_cells": 196,
+      "av_share": 0.4
+    },
+    {
+      "sigma": 2.0,
+      "n_av": 222,
+      "degenerate": false,
+      "irreducible": 0.0,
+      "own": 0.18853233229052616,
+      "peer": 0.811467667709474,
+      "decentralized_ceiling": 1.0,
+      "non_coordinating_ceiling": 0.18853233229052602,
+      "coordination_gap": 0.811467667709474,
+      "delta_total": 8.865159522553322,
+      "n_cells": 196,
+      "av_share": 1.0
+    }
+  ]
+}
