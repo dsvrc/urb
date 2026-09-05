@@ -255,6 +255,123 @@ def test_severity_zero_is_identity_on_every_day():
 # ==========================================================================
 #  end to end
 # ==========================================================================
+class _MockAEC(object):
+    """Mimics the slice of RouteRL's AEC contract the wrapper touches, so the
+    interception can be proved without routerl installed. Every URB script --
+    hand-written loop or TorchRL collector -- reads rewards through `last()`."""
+
+    def __init__(self, n=6, k=4, **kw):
+        self.n, self.k = n, k
+        self.all_agents = [type("A", (), {"id": i, "origin": i % 2,
+                                          "destination": i % 2,
+                                          "start_time": float(i * 60)})()
+                           for i in range(n)]
+        self.machine_agents = self.all_agents[: n // 2]
+        self.agent_selection = "0"
+        self.stepped, self.raw_reward = [], -3.0
+
+    def reset(self, *a, **kw):
+        self.stepped = []
+        return {}
+
+    def step(self, action=None, *a, **kw):
+        self.stepped.append((self.agent_selection, action))
+
+    def last(self, *a, **kw):
+        return {}, self.raw_reward, True, False, {}
+
+
+def test_env_wrapper_harms_every_host_through_last():
+    """The reason this wrapper exists: TorchRL hosts never touch a Python loop we
+    control, but PettingZooWrapper is built with `use_mask=True` (the AEC path),
+    so they read rewards through `last()` exactly as the hand-written loops do.
+    Patching one method therefore reaches MAPPO, QMIX, VDN, IPPO and IQL alike."""
+    from urb_ns.severity_traffic_env import make_severity_env
+
+    cls = make_severity_env(_MockAEC, {"net_xml": "/nonexistent"}, sigma=3.0,
+                            routes_csv=None, verbose=False)
+    env = cls()
+    env.reset()
+    _o, r, _t, _tr, _i = env.last()
+    # the layer cannot build (no route table), so it must PASS THROUGH and SAY SO
+    assert r == env.raw_reward, "an unbuildable layer silently altered the reward"
+    assert env._ns_n_passthrough > 0, "the pass-through was not counted"
+    assert env._ns_n_harmed == 0
+
+
+def test_env_wrapper_is_exact_identity_at_sigma_zero():
+    """sigma = 0 must reproduce the stock task byte for byte, so the SAME command
+    gives the no-severity row and the two tables stay comparable."""
+    from urb_ns.severity_traffic_env import make_severity_env
+
+    cls = make_severity_env(_MockAEC, {}, sigma=0.0, verbose=False)
+    env = cls()
+    env.reset()
+    for _ in range(5):
+        _o, r, _t, _tr, _i = env.last()
+        assert r == env.raw_reward, "sigma=0 altered a reward"
+    assert env._ns_n_harmed == 0 and env._ns_n_days == 0
+
+
+def test_env_wrapper_harms_the_records_not_just_the_reward():
+    """The failure this prevents, measured on real runs: AON scored IDENTICALLY at
+    sigma 0 and sigma 3 to six decimals. A non-learning agent under a live dial
+    cannot do that -- it happened because the harm reached the reward but not the
+    episode records, and `metrics.py` reads the records. Reward, record and metric
+    must all describe the same trip."""
+    from urb_ns.severity_traffic_env import make_severity_env
+
+    cls = make_severity_env(_MockAEC, {}, sigma=3.0, verbose=False)
+    env = cls()
+    env._ns_slot = {str(i): i for i in range(6)}
+    env.travel_times_list = [{"id": i, "travel_time": 3.0, "reward": -3.0}
+                             for i in range(6)]
+
+    class _Layer:                       # a layer that doubles everything
+        def end_episode(self, *a, **k): pass
+        def harm_travel_time(self, slot, tt): return tt * 2.0
+        def harm_reward(self, slot, r): return r * 2.0
+        def diagnostics(self): return {"A": 0.0, "g_mean": 1.0, "dry": 0,
+                                       "m_mean": 2.0, "u_mean": 0.0}
+    env._ns_layer = _Layer()
+    env._ns_harm_records()
+
+    assert all(r["travel_time"] == 6.0 for r in env.travel_times_list), \
+        f"records not harmed: {env.travel_times_list[:2]}"
+    assert all(r["reward"] == -6.0 for r in env.travel_times_list), \
+        "reward column in the records not harmed"
+    assert env._ns_n_rec_harmed == 6, f"harm count wrong: {env._ns_n_rec_harmed}"
+
+
+def test_env_wrapper_notices_when_records_are_absent():
+    """If the record list cannot be found the run must SAY so, not quietly report
+    unharmed travel times as if they were harmed."""
+    from urb_ns.severity_traffic_env import make_severity_env
+
+    cls = make_severity_env(_MockAEC, {}, sigma=3.0, verbose=False)
+    env = cls()
+    env._ns_slot = {"0": 0}
+    env._ns_harm_records()
+    assert env._ns_n_rec_missing == 1, "a missing record list went unnoticed"
+
+
+def test_env_wrapper_records_actions_from_step():
+    """The day is resolved from choices captured in `step()`. If the wrapper stops
+    seeing actions it would harm on a stale choice vector and nothing would look
+    wrong, so the capture is asserted directly."""
+    from urb_ns.severity_traffic_env import make_severity_env
+
+    cls = make_severity_env(_MockAEC, {}, sigma=3.0, verbose=False)
+    env = cls()
+    env._ns_choice = np.zeros(6, dtype=np.int64)
+    env._ns_slot = {str(i): i for i in range(6)}
+    for i in (0, 3, 5):
+        env.agent_selection = str(i)
+        env.step(2)
+    assert list(env._ns_choice) == [2, 0, 0, 2, 0, 2], \
+        f"actions not captured: {list(env._ns_choice)}"
+
+
 def test_closed_loop_runs_and_identifies():
     """The whole cycle on a synthetic city: plan offsets, run the day, identify.
 
