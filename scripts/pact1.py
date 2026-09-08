@@ -36,8 +36,15 @@ import sys
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if repo_root not in sys.path:
-    sys.path.insert(0, repo_root)
+# UNCONDITIONAL, and it must be a move-to-front, not an append-if-absent.
+# This file is `scripts/pact1.py` and the package is `pact1/`, so whichever
+# directory comes first on sys.path wins the name. A launcher that has already
+# added repo_root -- in the wrong POSITION -- defeats an `if not in sys.path`
+# guard silently, which is exactly how `import pact1` ended up resolving to this
+# script. Removing first makes the position deterministic however we were invoked.
+while repo_root in sys.path:
+    sys.path.remove(repo_root)
+sys.path.insert(0, repo_root)
 
 import argparse
 import ast

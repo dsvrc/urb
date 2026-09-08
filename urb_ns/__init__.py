@@ -39,7 +39,7 @@ LAYERING (B.5 -- severity is TASK physics and must reach every arm)
 --------------------------------------------------------------------------------
     TrafficEnvironment          stock URB
       +-- SeverityLayer         this package: the dial. EVERY arm gets it.
-            +-- PACTLayer       the compensator only (pact_urb/)
+            +-- PACT-1          the compensator only (pact1/)
 
 Severity is read from the TASK config, never from the method's block.
 
