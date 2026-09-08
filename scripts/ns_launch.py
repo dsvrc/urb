@@ -32,10 +32,21 @@ import os
 import sys
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for p in (repo_root, os.path.dirname(os.path.abspath(__file__))):
-    if p not in sys.path:
-        sys.path.insert(0, p)
+_scripts_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.abspath(os.path.join(_scripts_dir, ".."))
+
+# *** ORDER MATTERS AND IS NOT COSMETIC. ***
+# `scripts/pact1.py` and the `pact1/` package share a name. Targets need
+# scripts/ on the path (`from iql import Network`), but if scripts/ comes FIRST
+# then `import pact1` resolves to the script, not the package, and pact1.py's own
+# guard aborts the run. The target cannot repair this itself: it only inserts
+# repo_root `if repo_root not in sys.path`, and by then it already is -- just in
+# the wrong position. So repo_root is forced to index 0 here, every time.
+for _p in (repo_root, _scripts_dir):
+    while _p in sys.path:
+        sys.path.remove(_p)
+sys.path.insert(0, _scripts_dir)
+sys.path.insert(0, repo_root)          # repo_root FIRST -- packages beat scripts
 
 import argparse
 import json
