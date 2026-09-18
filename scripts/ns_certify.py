@@ -87,12 +87,20 @@ def find_routes_csv(explicit, network):
     )
 
 
-def build_loading(net, agents, ffts_by_od, av_share, seed, dur_factor=1.0):
+def build_loading(net, agents, ffts_by_od, av_share, seed, dur_factor=1.0,
+                  subset_seed=None):
     """Assemble a `LoadingModel` with a given AV share.
 
     URB mutates the FIRST `ratio_machines` fraction by `mutation_start_percentile
     = -1`, so a deterministic prefix by id reproduces the same fleet the
-    experiment scripts create.
+    experiment scripts create. That prefix is NOT a random sample: measured on
+    saint_arnoult its members share routes with one another 16% more than with the
+    rest of the fleet (co-presence is unaffected, 1.03), which inflates the peer
+    share of the ceiling relative to the exchangeable prediction.
+
+    `subset_seed` replaces the prefix with a uniformly random controllable set of
+    the same size, so the N-scaling curve measures the SHARE rather than the
+    selection. Pass an integer to draw one; leave None for URB's own fleet.
     """
     n = len(agents)
     ods = [(int(r.origin), int(r.destination)) for r in agents.itertuples()]
@@ -117,7 +125,11 @@ def build_loading(net, agents, ffts_by_od, av_share, seed, dur_factor=1.0):
 
     n_av = int(round(n * float(av_share)))
     is_machine = np.zeros(n, dtype=bool)
-    is_machine[:n_av] = True
+    if subset_seed is None:
+        is_machine[:n_av] = True                       # URB's own id prefix
+    else:
+        pick = np.random.RandomState(int(subset_seed)).choice(n, n_av, replace=False)
+        is_machine[pick] = True
 
     dur = np.nanmean(ff, axis=1) * 60.0 * float(dur_factor)   # minutes -> seconds
     O = build_co_presence(start, dur)
@@ -148,6 +160,11 @@ def main():
                          "and report the resulting v/c distribution.")
     ap.add_argument("--n-draws", type=int, default=12)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--subset-draws", type=int, default=0,
+                    help="if > 0, draw the controllable set uniformly at random this many "
+                         "times per share and report mean +/- sd, instead of using URB's "
+                         "id prefix. The prefix is spatially clustered, so it conflates "
+                         "how many agents are controllable with which ones.")
     ap.add_argument("--out", default="../results/ns_certificate")
     args = ap.parse_args()
 
@@ -260,12 +277,42 @@ def main():
     sg = args.sigmas[len(args.sigmas) // 2]
     print(f"[URB-NS] at sigma={sg}: the gap should GROW with the AV share, "
           "because a finer partition leaves each agent less local authority")
-    ns_rows = gap_vs_n(
-        lambda sh: build_loading(net, agents, ffts_by_od, sh, args.seed,
-                                 args.dur_factor),
-        driver, sg, args.shares, seed=args.seed,
-        n_draws=max(4, args.n_draws // 2),
-    )
+    if args.subset_draws > 0:
+        print(f"[URB-NS] controllable set drawn at RANDOM, {args.subset_draws} draws "
+              "per share (the id prefix is not a random sample)")
+        per_draw = []
+        for d_i in range(args.subset_draws):
+            per_draw.append(gap_vs_n(
+                lambda sh, s=d_i: build_loading(net, agents, ffts_by_od, sh, args.seed,
+                                                args.dur_factor, subset_seed=1000 + s),
+                driver, sg, args.shares, seed=args.seed,
+                n_draws=max(4, args.n_draws // 2), verbose=False,
+            ))
+        ns_rows = []
+        for j, sh in enumerate(args.shares):
+            cols = [d[j] for d in per_draw if not d[j].get("degenerate")]
+            if not cols:
+                ns_rows.append(per_draw[0][j])
+                continue
+            agg = dict(per_draw[0][j])
+            for key in ("irreducible", "own", "peer", "coordination_gap",
+                        "decentralized_ceiling", "delta_total"):
+                agg[key] = float(np.mean([c[key] for c in cols]))
+                agg[key + "_sd"] = float(np.std([c[key] for c in cols]))
+            ns_rows.append(agg)
+            print(f"[URB-NS] share={sh:.2f}  n_av={agg['n_av']:4d}  "
+                  f"irreducible {agg['irreducible']*100:5.1f}%  "
+                  f"own {agg['own']*100:5.1f}%  "
+                  f"PEER {agg['coordination_gap']*100:5.1f}% "
+                  f"+/- {agg['coordination_gap_sd']*100:.1f}  "
+                  f"(n={len(cols)} draws)")
+    else:
+        ns_rows = gap_vs_n(
+            lambda sh: build_loading(net, agents, ffts_by_od, sh, args.seed,
+                                     args.dur_factor),
+            driver, sg, args.shares, seed=args.seed,
+            n_draws=max(4, args.n_draws // 2),
+        )
     live_n = [d for d in ns_rows if not d.get("degenerate")]
     if len(live_n) >= 2:
         x = np.array([d["av_share"] for d in live_n])

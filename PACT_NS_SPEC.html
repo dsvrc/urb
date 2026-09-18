@@ -1,0 +1,1039 @@
+<title>Coupling Under Drift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+/* ── tokens ─────────────────────────────────────────────────────────── */
+:root{
+  --paper:#f6f8f6;
+  --panel:#eef1ee;
+  --sunk:#e5e9e6;
+  --ink:#141b19;
+  --muted:#5b6a66;
+  --faint:#8a9793;
+  --rule:#ccd4d0;
+  --hair:#dde3df;
+  --accent:#1d5f58;
+  --accent-soft:#dce9e6;
+  --signal:#9c4212;
+  --signal-soft:#f2e3d8;
+  --shade:#e3ebe8;
+  --sel:#cfe4df;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1412;
+    --panel:#151d1a;
+    --sunk:#1a2320;
+    --ink:#dde5e1;
+    --muted:#93a29d;
+    --faint:#6d7c77;
+    --rule:#2a3733;
+    --hair:#212c29;
+    --accent:#63b6ab;
+    --accent-soft:#152a27;
+    --signal:#dd8d5c;
+    --signal-soft:#2a1d14;
+    --shade:#17211e;
+    --sel:#1f3d38;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1412;
+  --panel:#151d1a;
+  --sunk:#1a2320;
+  --ink:#dde5e1;
+  --muted:#93a29d;
+  --faint:#6d7c77;
+  --rule:#2a3733;
+  --hair:#212c29;
+  --accent:#63b6ab;
+  --accent-soft:#152a27;
+  --signal:#dd8d5c;
+  --signal-soft:#2a1d14;
+  --shade:#17211e;
+  --sel:#1f3d38;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Spectral",Georgia,"Times New Roman",serif;
+  font-size:16.5px;
+  line-height:1.62;
+  font-weight:400;
+}
+::selection{background:var(--sel);color:var(--ink)}
+
+/* ── shell ──────────────────────────────────────────────────────────── */
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px 96px}
+.masthead{border-bottom:2px solid var(--ink);padding:44px 0 20px;margin-bottom:0}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;margin:0 0 14px;
+}
+h1{
+  font-family:"Spectral",Georgia,serif;
+  font-weight:600;font-size:clamp(34px,5.6vw,58px);line-height:1.02;
+  letter-spacing:-.018em;margin:0 0 16px;text-wrap:balance;
+}
+.standfirst{
+  font-size:clamp(17px,2.1vw,20px);line-height:1.52;color:var(--muted);
+  max-width:63ch;margin:0 0 26px;font-weight:300;
+}
+.meta{
+  display:flex;flex-wrap:wrap;gap:0 30px;
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);padding-bottom:4px;
+}
+.meta b{color:var(--muted);font-weight:600}
+
+/* ── two-column body ────────────────────────────────────────────────── */
+.cols{display:grid;grid-template-columns:210px minmax(0,1fr);gap:0 52px;align-items:start}
+.rail{position:sticky;top:20px;padding-top:34px;font-family:"IBM Plex Sans Condensed",system-ui,sans-serif}
+.rail h4{
+  font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);
+  margin:0 0 10px;font-weight:600;
+}
+.rail ol{list-style:none;margin:0 0 24px;padding:0;font-size:13.5px;line-height:1.45}
+.rail li{margin:0 0 5px}
+.rail a{color:var(--muted);text-decoration:none;display:block;padding:2px 0;border-left:2px solid transparent;padding-left:10px;margin-left:-12px}
+.rail a:hover{color:var(--accent);border-left-color:var(--accent)}
+.rail a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rail .num{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);margin-right:7px}
+main{padding-top:34px;min-width:0}
+
+/* ── typography ─────────────────────────────────────────────────────── */
+.part{margin:0 0 4px;padding-top:14px}
+.part-tag{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--signal);font-weight:600;
+}
+h2{
+  font-family:"Spectral",Georgia,serif;font-weight:600;
+  font-size:clamp(25px,3.4vw,34px);line-height:1.12;letter-spacing:-.012em;
+  margin:6px 0 8px;text-wrap:balance;
+}
+h3{
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  font-weight:700;font-size:19px;line-height:1.24;letter-spacing:.005em;
+  margin:36px 0 10px;text-wrap:balance;
+}
+h3 .sect{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);margin-right:9px;font-weight:600}
+h4{
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  font-weight:600;font-size:15px;margin:24px 0 6px;letter-spacing:.01em;
+}
+p{margin:0 0 14px;max-width:66ch}
+ul,ol.body{margin:0 0 16px;padding-left:20px;max-width:64ch}
+li{margin:0 0 7px}
+a{color:var(--accent)}
+strong{font-weight:600}
+em{font-style:italic}
+code,kbd{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.87em;
+  background:var(--sunk);padding:1px 4px;border-radius:2px;
+}
+.lead{font-size:17.5px;color:var(--muted);max-width:64ch;font-weight:300}
+hr.div{border:0;border-top:1px solid var(--rule);margin:44px 0}
+
+/* ── normative blocks ───────────────────────────────────────────────── */
+.req{
+  display:grid;grid-template-columns:78px minmax(0,1fr);gap:0 16px;
+  margin:0 0 18px;padding:14px 0 14px 0;border-top:1px solid var(--hair);
+}
+.req:last-child{border-bottom:1px solid var(--hair)}
+.req-id{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;font-weight:600;
+  color:var(--accent);letter-spacing:.02em;padding-top:3px;
+}
+.req-body{min-width:0}
+.req-body p{margin:0 0 9px}
+.req-body p:last-child{margin-bottom:0}
+.modal{
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);
+}
+.modal.no{color:var(--signal)}
+.gate{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);
+  margin-top:8px;display:block;
+}
+.gate b{color:var(--muted);font-weight:500}
+
+/* ── math / code ────────────────────────────────────────────────────── */
+.eq{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  background:var(--panel);border-left:3px solid var(--accent);
+  padding:14px 18px;margin:14px 0 16px;font-size:13.5px;line-height:1.72;
+  overflow-x:auto;white-space:pre;
+}
+.eq .cm{color:var(--faint)}
+pre.block{
+  font-family:"IBM Plex Mono",monospace;background:var(--panel);
+  padding:14px 18px;margin:14px 0 16px;font-size:12.7px;line-height:1.6;
+  overflow-x:auto;border-left:3px solid var(--rule);
+}
+
+/* ── callouts ───────────────────────────────────────────────────────── */
+.paid{
+  background:var(--signal-soft);border-left:3px solid var(--signal);
+  padding:14px 18px;margin:16px 0;
+}
+.paid .tag{
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:700;
+  font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--signal);
+  display:block;margin-bottom:5px;
+}
+.paid p{margin:0;font-size:15.5px;max-width:62ch}
+.paid p + p{margin-top:9px}
+.note{
+  background:var(--shade);padding:14px 18px;margin:16px 0;border-left:3px solid var(--rule);
+}
+.note p{margin:0;font-size:15.5px;max-width:62ch}
+.note p + p{margin-top:9px}
+
+/* ── tables ─────────────────────────────────────────────────────────── */
+.tw{overflow-x:auto;margin:18px 0 22px;border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+thead th{
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;
+  font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);text-align:left;padding:9px 14px 9px 0;
+  border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+tbody td{padding:10px 14px 10px 0;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.46}
+tbody tr:last-child td{border-bottom:0}
+td.mono,th.mono,.mono{font-family:"IBM Plex Mono",monospace;font-size:12.6px;font-variant-numeric:tabular-nums}
+td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right;padding-right:22px;white-space:nowrap}
+caption{caption-side:bottom;text-align:left;font-size:13px;color:var(--faint);padding-top:9px;font-style:italic}
+
+/* ── figures ────────────────────────────────────────────────────────── */
+figure{margin:24px 0 26px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:13px;color:var(--faint);margin-top:9px;max-width:62ch;line-height:1.5}
+figcaption b{color:var(--muted);font-weight:600}
+
+/* ── question checklist ─────────────────────────────────────────────── */
+.qlist{counter-reset:q;list-style:none;padding:0;margin:18px 0 24px;max-width:100%}
+.qlist > li{
+  counter-increment:q;position:relative;padding:16px 0 16px 46px;
+  border-top:1px solid var(--hair);margin:0;
+}
+.qlist > li:last-child{border-bottom:1px solid var(--hair)}
+.qlist > li::before{
+  content:"Q" counter(q);position:absolute;left:0;top:16px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;font-weight:600;color:var(--accent);
+}
+.qlist .q{font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:600;font-size:16px;display:block;margin-bottom:5px}
+.qlist .a{font-size:15px;color:var(--muted);max-width:62ch}
+.qlist .a b{color:var(--ink);font-weight:600}
+
+.foot{
+  margin-top:56px;padding-top:20px;border-top:2px solid var(--ink);
+  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-size:13px;color:var(--faint);
+}
+.foot p{max-width:70ch;margin:0 0 8px}
+
+@media (max-width:900px){
+  .cols{grid-template-columns:1fr;gap:0}
+  .rail{position:static;padding-top:24px;border-bottom:1px solid var(--rule);padding-bottom:8px}
+  .rail ol{columns:2;column-gap:26px;margin-bottom:14px}
+  main{padding-top:26px}
+  .req{grid-template-columns:1fr;gap:6px 0}
+  .req-id{padding-top:0}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Implementation-derived specification · v1</p>
+  <h1>Coupling Under Drift</h1>
+  <p class="standfirst">Two contracts extracted from the URB implementation: what a non-stationarity must satisfy to be evidence rather than a difficulty knob, and what PACT‑1 needs from an environment to be applicable, testable, and honestly reported. Written for porting into a domain where none of this structure exists naturally.</p>
+  <div class="meta">
+    <span><b>Source</b> urb_ns/ · pact1/ · scripts/</span>
+    <span><b>Reference instance</b> URB / saint_arnoult</span>
+    <span><b>Parts</b> I NS form · II PACT‑1 · III Porting</span>
+  </div>
+</header>
+
+<div class="cols">
+  <nav class="rail" aria-label="Contents">
+    <h4>Contents</h4>
+    <ol>
+      <li><a href="#use"><span class="num">0</span>How to use this</a></li>
+      <li><a href="#objects"><span class="num">I.1</span>The four objects</a></li>
+      <li><a href="#signature"><span class="num">I.2</span>Category‑C signature</a></li>
+      <li><a href="#dial"><span class="num">I.3</span>The severity dial</a></li>
+      <li><a href="#layer"><span class="num">I.4</span>Layering</a></li>
+      <li><a href="#ceiling"><span class="num">I.5</span>Ceiling decomposition</a></li>
+      <li><a href="#nsreport"><span class="num">I.6</span>Reporting</a></li>
+      <li><a href="#nstests"><span class="num">I.7</span>Conformance</a></li>
+      <li><a href="#reduction"><span class="num">II.1</span>The reduction</a></li>
+      <li><a href="#sensor"><span class="num">II.2</span>Sensor</a></li>
+      <li><a href="#basis"><span class="num">II.3</span>Basis</a></li>
+      <li><a href="#estimator"><span class="num">II.4</span>Estimator</a></li>
+      <li><a href="#trust"><span class="num">II.5</span>Trust</a></li>
+      <li><a href="#channel"><span class="num">II.6</span>Channel</a></li>
+      <li><a href="#floor"><span class="num">II.7</span>Floor property</a></li>
+      <li><a href="#commons"><span class="num">II.8</span>Commons</a></li>
+      <li><a href="#gates"><span class="num">II.9</span>Gates</a></li>
+      <li><a href="#panel"><span class="num">II.10</span>Instrument panel</a></li>
+      <li><a href="#arms"><span class="num">II.11</span>Arms</a></li>
+      <li><a href="#port"><span class="num">III.1</span>Feasibility</a></li>
+      <li><a href="#instantiate"><span class="num">III.2</span>Instantiation</a></li>
+      <li><a href="#recipe"><span class="num">III.3</span>Build order</a></li>
+      <li><a href="#paidfor"><span class="num">III.4</span>Paid-for failures</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ═══════════════════════════ 0 ═══════════════════════════ -->
+  <section id="use">
+    <h3><span class="sect">0</span>How to use this document</h3>
+    <p class="lead">These are two separable contracts. Part I can be satisfied without ever implementing PACT — it defines a non-stationarity that any method can be measured against. Part II can be satisfied at zero severity, on an environment's own native coupling. You need both only if the claim is that a method handles injected drift better than baselines do.</p>
+    <p>Requirement IDs are stable and referenceable. <span class="modal">MUST</span> marks a property whose violation invalidates the resulting numbers; <span class="modal">SHOULD</span> marks a default you may depart from if you say so in the ablation table. Where the source implementation gates a requirement with an executable test, the test name is given — port the test, not just the prose.</p>
+    <div class="note">
+      <p><b>The one-sentence version.</b> A non-stationarity is only evidence if it switches itself off in a regime you can point to, reaches every arm through the same object, and is anchored to a number someone else published. A method is only credible if it cannot do worse than the baseline it wraps, and if the quantity it claims to identify is scored separately from the quantity it claims to win on.</p>
+    </div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ═══════════════════════════ PART I ═══════════════════════════ -->
+  <div class="part">
+    <span class="part-tag">Part I</span>
+    <h2>The non-stationarity form</h2>
+    <p class="lead">A specification for injected drift that a domain expert would recognise as physics rather than as an experimental knob.</p>
+  </div>
+
+  <section id="objects">
+    <h3><span class="sect">I.1</span>The four objects</h3>
+    <p>Every conforming instance supplies exactly four things. Three of them should already exist in the domain's own literature; if you find yourself inventing more than one, the domain is probably the wrong choice rather than the spec being wrong.</p>
+
+    <div class="req">
+      <div class="req-id">NS‑1.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>A medium with a loading ratio.</strong> A scalar per agent measuring how close the shared resource is to its limit along that agent's path through it.</p>
+        <div class="eq">u_i = max over elements a used by i of   load_a / (capacity_a · g)</div>
+        <p>The aggregation <strong>MUST</strong> be a maximum over the agent's own elements, not a mean. Congestion is a property of the worst element; averaging over dozens dilutes the signal toward zero. In the source implementation, switching this sensor from mean to max on the POWER instance raised applied compensation sixfold at otherwise identical settings.</p>
+        <span class="gate">gated by <b>test_sensor_uses_the_binding_link_not_the_mean</b></span>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">NS‑1.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>A declared coupling operator W.</strong> How much one unit of agent <em>j</em>'s activity loads the elements agent <em>i</em> depends on. Written down from the environment's structure, never fitted from run data.</p>
+        <div class="eq">Op[a, j] = 1[element a is used by j] / capacity_a
+W[i, j]  = mean over a ∈ E(i) of Op[a, j]     for j ≠ i
+W[i, i]  = 0                                  <span class="cm">← asserted, not argued</span></div>
+        <p>W <strong>MUST</strong> have a zero diagonal, weights spanning orders of magnitude, and measurable asymmetry. A flat geometric proxy — "peer touches something I touch" versus "everything else", equal weight inside each bucket — is <span class="modal no">NOT</span> acceptable: in the source implementation it measured a fit gain of −0.0045, meaning the peer channels predicted <em>worse</em> than an intercept-only null.</p>
+        <span class="gate">gated by <b>test_operator_is_zero_diagonal</b>, <b>test_operator_is_asymmetric_and_spread</b></span>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">NS‑1.3</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>An exogenous driver A(t).</strong> A slow signal, a function of observable time alone, that no agent's action can influence. It reaches the agents <strong>only</strong> by shrinking capacity, never by adding a term to the loss.</p>
+        <p>Weather is the reference instance for traffic; ambient temperature is the counterpart for power. The requirement is not that it be weather — it is that a domain practitioner names it without prompting when asked "what makes this harder some days than others, that nobody here controls?"</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">NS‑1.4</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>A harm channel.</strong> The map from reduced capacity to worsened reward, expressed through the environment's own performance function so the reward <em>function</em> is untouched. The agent is still paid exactly what it was paid before; the quantity it is paid for is simply worse because the medium delivered less.</p>
+        <p><span class="modal">MUST NOT</span> subtract a penalty term. A penalty is a changed objective, and every comparison against a stock baseline then measures the objective change rather than the physics.</p>
+      </div>
+    </div>
+
+    <div class="req">
+      <div class="req-id">NS‑1.5</div>
+      <div class="req-body">
+        <p><span class="modal">SHOULD</span> — <strong>A compensation channel with a known inverse.</strong> If one exists, the form is strictly richer: the method can be asked to cancel the harm rather than merely route around it. Its absence does not disqualify the environment, but it <strong>MUST</strong> be declared, because it decides whether the method's exact-compensation claim transfers (see <a href="#channel">II.6</a>).</p>
+        <p>A compensation channel is normally <em>loop-coupled</em>: exercising it changes the medium it compensates against. In traffic, shifting departure time changes who you share the road with, so a uniform shift accomplishes exactly nothing and only a differential one helps. Say so explicitly; it is the commons in miniature.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="signature">
+    <h3><span class="sect">I.2</span>The category‑C signature</h3>
+    <p>This is the property that separates a coordination problem from a difficulty knob, and it is the single most important thing to get right when porting.</p>
+    <div class="eq">harm_i  =  f( u_i under derated capacity )  /  f( u_i at nominal capacity )
+
+u_i = 0   ⟹   harm_i = 1   <span class="cm">EXACTLY — a lone agent is untouched, at any severity</span>
+g   = 1   ⟹   harm_i = 1   <span class="cm">EXACTLY — no severity, or a placebo day</span></div>
+    <p>Because capacity sits in the denominator of the loading ratio, the driver multiplies <em>every peer's contribution</em> and leaves the solitary agent's term at zero. The disturbance is therefore an amplifier on the cross-agent coupling, not a level shift added on top of it.</p>
+    <p>The practical test: <strong>an agent alone in the environment must read a harm of exactly 1.0 in the worst storm you can dial.</strong> If a single agent suffers, the driver is adding to the loss somewhere and NS‑1.4 is violated.</p>
+    <div class="note">
+      <p>With a linear performance function this reads especially plainly. For <code>f(u) = 1 + αu</code> and small u, the harm is <code>≈ 1 + α·u_i·(1/g − 1)</code>: peer load times a weather factor. Nothing an agent can learn to absorb alone.</p>
+    </div>
+    <span class="gate" style="display:block;margin-top:14px">gated by <b>test_n1_gives_exactly_zero_peer_load</b>, <b>test_harm_is_identity_when_the_dial_is_off</b></span>
+  </section>
+
+  <section id="dial">
+    <h3><span class="sect">I.3</span>The severity dial</h3>
+    <p>A single scalar σ scales the driver's effect. Its four requirements exist because each one closes a specific way of accidentally rigging a result.</p>
+
+    <div class="req">
+      <div class="req-id">NS‑2.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Identity at zero, exactly.</strong> At σ = 0 the capacity multiplier is <code>1.0</code> bit for bit, at <em>every</em> driver value, so the stock task is recovered byte for byte and the same command produces the no-severity row. Not "approximately"; equality, tested over the whole driver domain.</p>
+        <span class="gate">gated by <b>test_dial_identity_at_zero_is_exact</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑2.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Monotone in σ at every driver value</strong>, not merely at the peak. A dial that is harsher at σ=1 than σ=2 anywhere in its domain is not a severity ordering.</p>
+        <span class="gate">gated by <b>test_dial_is_monotone_and_never_generous</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑2.3</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Never generous.</strong> The multiplier is ≤ 1 always. This closes the <em>uprating trap</em>: a two-sided physical law scaled by σ made the POWER task strictly <em>easier</em> at σ = 2 in the source implementation. Keep only the harmful half of a symmetric law.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑2.4</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Anchored at σ = 1 to a published constant.</strong> Not a round number you chose. The reference instance uses the Highway Capacity Manual's heavy-rain capacity adjustment factor: capacity falls to ≈0.86 of dry, so the loss at σ=1 is <code>0.14</code>. Every σ &gt; 1 <strong>MUST</strong> be labelled a beyond-physical stress test everywhere it appears, including in figures.</p>
+        <span class="gate">gated by <b>test_dial_anchored_to_hcm</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑2.5</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>A placebo regime.</strong> Part of the driver cycle where A(t) is <em>exactly</em> zero, so the dial is provably inert there for every σ and the whole sweep is byte-identical in that regime.</p>
+        <p>This is the cheapest credibility you will ever buy. A reviewer alleging a rigged knob then has to explain why the rig switches itself off half the time — and the placebo comes free from NS‑2.1 the moment the driver is built to reach exact zero rather than merely small values.</p>
+        <span class="gate">gated by <b>test_placebo_regime_is_exactly_inert</b>, <b>test_dry_season_produces_no_excess_to_attribute</b></span>
+      </div>
+    </div>
+
+    <h4>Reference driver</h4>
+    <p>The form used in the reference instance. A smooth bump that <em>starts and ends at exactly zero</em>, over a fixed period, with the remainder of the cycle identically dry:</p>
+    <div class="eq">φ    = (t mod P) / P
+A(t) = sin²( π · min(φ/w, 1) )   if φ &lt; w,   else  0            <span class="cm">P = 100, w = 0.5</span>
+g_a  = clip( 1 − σ · L · A(t) · s_a ,  lower 1e‑3 ,  upper 1 )   <span class="cm">L = 0.14</span></div>
+    <p>The per-element sensitivity <code>s_a</code> (mean 1, clipped to [0.4, 2.0]) makes the derating facility-specific, as published capacity adjustment factors are. It matters more than it looks: a uniform derating leaves the binding element unchanged at every severity, which makes the ceiling decomposition σ‑invariant and hides the very effect you are trying to show.</p>
+
+    <figure>
+      <svg viewBox="0 0 720 262" role="img" aria-label="Capacity multiplier over one 100-day driver cycle. At sigma 1 it dips to 0.860 at day 25; at sigma 3 it dips to 0.580. From day 50 to day 100 both sit at exactly 1.0, the placebo regime.">
+        <rect x="366" y="18" width="310" height="176" fill="var(--shade)"/>
+        <text x="521" y="42" text-anchor="middle" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" font-weight="600" fill="var(--faint)" letter-spacing="1">PLACEBO REGIME · 50 DAYS</text>
+        <text x="521" y="60" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="var(--faint)">A ≡ 0 · g ≡ 1.0000 · every σ</text>
+
+        <!-- gridlines: g = 1.00 / 0.86 / 0.72 / 0.58 -->
+        <line x1="56" y1="18" x2="676" y2="18" stroke="var(--rule)" stroke-width="1"/>
+        <line x1="56" y1="76.7" x2="676" y2="76.7" stroke="var(--hair)" stroke-width="1"/>
+        <line x1="56" y1="135.3" x2="676" y2="135.3" stroke="var(--hair)" stroke-width="1"/>
+        <line x1="56" y1="194" x2="676" y2="194" stroke="var(--hair)" stroke-width="1"/>
+        <line x1="56" y1="18" x2="56" y2="194" stroke="var(--rule)" stroke-width="1"/>
+
+        <!-- g at sigma=1: 1.000 -> 0.860 -> 1.000, then flat -->
+        <path d="M56,18 C108,18 159,76.7 211,76.7 C263,76.7 314,18 366,18 L676,18"
+              fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 3"/>
+        <!-- g at sigma=3: 1.000 -> 0.580 -> 1.000, then flat -->
+        <path d="M56,18 C108,18 159,194 211,194 C263,194 314,18 366,18 L676,18"
+              fill="none" stroke="var(--accent)" stroke-width="2.4"/>
+
+        <!-- peak markers -->
+        <line x1="211" y1="18" x2="211" y2="194" stroke="var(--signal)" stroke-width="1" stroke-dasharray="3 3"/>
+        <circle cx="211" cy="194" r="3.6" fill="var(--accent)"/>
+        <circle cx="211" cy="76.7" r="3" fill="var(--accent)"/>
+        <text x="222" y="188" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--accent)">g = 0.580</text>
+        <text x="222" y="72" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--accent)">g = 0.860</text>
+        <text x="222" y="34" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--signal)">A = 1.000 · day 25</text>
+
+        <!-- y labels -->
+        <text x="48" y="22" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">1.00</text>
+        <text x="48" y="80.7" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">0.86</text>
+        <text x="48" y="139.3" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">0.72</text>
+        <text x="48" y="198" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">0.58</text>
+        <text x="14" y="112" text-anchor="middle" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)" letter-spacing="1" transform="rotate(-90 14 112)">CAPACITY MULTIPLIER g</text>
+
+        <!-- x labels -->
+        <text x="56" y="214" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">0</text>
+        <text x="211" y="214" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">25</text>
+        <text x="366" y="214" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">50</text>
+        <text x="676" y="214" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">100</text>
+        <text x="366" y="234" text-anchor="middle" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)" letter-spacing="1">DAY OF CYCLE</text>
+
+        <!-- legend -->
+        <line x1="180" y1="254" x2="204" y2="254" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 3"/>
+        <text x="210" y="258" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)">σ = 1 · HCM anchor</text>
+        <line x1="380" y1="254" x2="404" y2="254" stroke="var(--accent)" stroke-width="2.4"/>
+        <text x="410" y="258" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)">σ = 3 · stress test</text>
+      </svg>
+      <figcaption><b>One driver cycle.</b> Only <code>g</code> is plotted — since <code>g = 1 − σ·L·A</code>, the σ=3 curve <em>is</em> the driver, inverted and scaled. A(t) reaches exact zero at both ends of the bump, so the second half of every cycle is a placebo regime where the dial is provably inert for all σ. Shown for uniform sensitivity; with per-element <code>s_a</code> the σ=3 trough spans 0.832 on the slowest elements to 0.160 on the fastest.</figcaption>
+    </figure>
+  </section>
+
+  <section id="layer">
+    <h3><span class="sect">I.4</span>Layering: severity is task physics</h3>
+    <div class="req">
+      <div class="req-id">NS‑3.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — The dial sits <em>below</em> the method in the class hierarchy, and is read from the task configuration, never from a method's own block.</p>
+        <div class="eq">Environment
+  └── SeverityEnvironment      ← every baseline gets this, unmodified
+        └── Method             ← adds the compensator only</div>
+        <p>A dial only the method's arm experienced is worthless as evidence. The corollary is an implementation rule: apply the harm at the single place <em>every</em> host reads a reward, not in a training loop that only some hosts have. In the reference instance the on-policy scripts and the replay-buffer scripts share exactly one such point, and the wrapper hooks that.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑3.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Harm the <strong>records</strong> as well as the rewards. Every downstream metric, plot and estimator reads the logged trajectory, not the reward stream.</p>
+        <p>This is not a hypothetical. In the source implementation a non-learning baseline scored identically at σ=0 and σ=3 to six decimal places — impossible unless the dial never reached the metric. Reward, record and metric must describe the same episode.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑3.3</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Fail loudly when the layer cannot be built. Count untouched rewards, count harmed records, and print both at the end of every run with an explicit refusal to report the run as a severity arm if either is zero.</p>
+        <p>A silently inert disturbance is the one failure mode that is indistinguishable from a clean null result — in exactly the arm you most need to trust.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑3.4</div>
+      <div class="req-body">
+        <p><span class="modal">SHOULD</span> — The driver's clock persists across episodes. Weather does not reset because a training episode ended. Latch the day the harm was computed for, not the counter, when reporting diagnostics: an off-by-one there misaligns the entire placebo column.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="ceiling">
+    <h3><span class="sect">I.5</span>The ceiling decomposition — compute this first</h3>
+    <p class="lead">This is the highest-value hour in the whole project, and it runs with no policy, no training and no simulator. Do it before writing method code; committing the output first is what makes it a prediction rather than a post-hoc explanation.</p>
+    <p>Under the dial each agent's loading exceeds its σ=0 counterfactual by <code>Δ_i = u_i·(1 − g)</code>. Every unit of that excess traces to a contributor, and contributors partition by <strong>who can move them</strong>:</p>
+    <div class="eq">Δ_fixed   load from participants no agent controls    <span class="cm">humans, background demand</span>
+Δ_own     the agent's own unit, amplified by 1/g
+Δ_peer    other controllable agents, through W, by 1/g
+
+irreducible              = Δ_fixed / Δ_total
+decentralized ceiling    = 1 − Δ_fixed / Δ_total
+non-coordinating ceiling = 1 − (Δ_fixed + Δ_peer) / Δ_total
+COORDINATION GAP         = Δ_peer / Δ_total      <span class="cm">← what the method claims</span></div>
+    <p>Excess is proportional to load, so a contributor class's share of the load <em>is</em> its share of the excess — the attribution is exact, not heuristic. Compute it by re-running the loading function with one class of contributor at a time.</p>
+
+    <figure>
+      <svg viewBox="0 0 720 172" role="img" aria-label="Stacked bars of the ceiling decomposition at 40 percent and 100 percent controllable share.">
+        <!-- row 1 -->
+        <text x="0" y="30" font-family="IBM Plex Sans Condensed, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">40% controllable</text>
+        <text x="0" y="46" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">89 of 222</text>
+        <rect x="150" y="18" width="242" height="34" fill="var(--sunk)" stroke="var(--rule)" stroke-width="1"/>
+        <rect x="392" y="18" width="94" height="34" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1"/>
+        <rect x="486" y="18" width="232" height="34" fill="var(--accent)"/>
+        <text x="271" y="40" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="var(--muted)">42.6%</text>
+        <text x="439" y="40" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="var(--accent)">16.5%</text>
+        <text x="602" y="40" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="var(--paper)" font-weight="600">40.8%</text>
+
+        <!-- row 2 -->
+        <text x="0" y="94" font-family="IBM Plex Sans Condensed, sans-serif" font-size="13" font-weight="600" fill="var(--ink)">100% controllable</text>
+        <text x="0" y="110" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--faint)">222 of 222</text>
+        <rect x="150" y="82" width="107" height="34" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1"/>
+        <rect x="257" y="82" width="461" height="34" fill="var(--accent)"/>
+        <text x="203" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="var(--accent)">18.9%</text>
+        <text x="487" y="104" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12.5" fill="var(--paper)" font-weight="600">81.1%</text>
+
+        <!-- legend -->
+        <rect x="150" y="140" width="13" height="13" fill="var(--sunk)" stroke="var(--rule)"/>
+        <text x="170" y="151" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)">Δ fixed — irreducible</text>
+        <rect x="330" y="140" width="13" height="13" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="350" y="151" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)">Δ own — solvable alone</text>
+        <rect x="520" y="140" width="13" height="13" fill="var(--accent)"/>
+        <text x="540" y="151" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" fill="var(--muted)">Δ peer — the coordination gap</text>
+      </svg>
+      <figcaption><b>Reference instance, σ = 1.</b> Computed with no training and no method. The gap widens with controllable share because irreducible load disappears while peer load does not — the N‑scaling prediction, testable in minutes. For contrast, the source implementation records a 9.5% gap on POWER, where each agent has continuous authority over its own binding element; here an agent owns one vehicle among dozens on the same bottleneck.</figcaption>
+    </figure>
+
+    <div class="req">
+      <div class="req-id">NS‑4.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Compute and commit the decomposition before any method code exists. If the coordination gap is small, this environment is a poor showcase; say so and pick another. Retuning after seeing a method underperform plants the problem.</p>
+        <span class="gate">gated by <b>test_ceiling_shares_are_a_partition</b>, <b>test_coordination_gap_grows_with_fleet_share</b>, <b>test_all_machine_fleet_has_no_irreducible_share</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑4.2</div>
+      <div class="req-body">
+        <p><span class="modal">SHOULD</span> — Report the gap against controllable share. The prediction that it rises with N is one no competing credit-assignment method makes, and it costs no training to test.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="nsreport">
+    <h3><span class="sect">I.6</span>What every severity run must report</h3>
+    <div class="tw">
+      <table>
+        <caption>Reported once per configuration, before any result is quoted. Values shown are the reference instance.</caption>
+        <thead><tr><th>Quantity</th><th>Why it is mandatory</th><th class="mono">σ=1</th><th class="mono">σ=3</th></tr></thead>
+        <tbody>
+          <tr><td>Capacity removed over a full cycle</td><td>A dial that shrinks capacity removes work capacity; past some σ no controller can win, and that is physics, not failure.</td><td class="num">3.50%</td><td class="num">10.50%</td></tr>
+          <tr><td>Peak-to-trough swing</td><td>The part a coordination method can actually act on, as opposed to the level.</td><td class="num">1.163×</td><td class="num">1.724×</td></tr>
+          <tr><td>Placebo days in cycle</td><td>Proof the dial switches itself off.</td><td class="num">50 / 100</td><td class="num">50 / 100</td></tr>
+          <tr><td>Loading distribution</td><td>A medium far below its limit cannot express a capacity loss however large σ grows.</td><td class="num">v/c ≈ 0.219</td><td class="num">—</td></tr>
+          <tr><td>Coordination gap</td><td>Bounds every downstream margin.</td><td class="num">40.8%</td><td class="num">≈40.7%</td></tr>
+          <tr><td>Rewards / records harmed</td><td>Proves the dial fired at all.</td><td class="num">per run</td><td class="num">per run</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="req">
+      <div class="req-id">NS‑5.1</div>
+      <div class="req-body">
+        <p><span class="modal">SHOULD</span> — Also report the <strong>mean-preserving</strong> variant, where the multiplier is normalised by its own cycle mean so only the <em>shape</em> varies and total capacity is unchanged. Difficulty then becomes purely "who acts when", which is what a coordination method addresses, rather than "there is less to go around", which merely rewards blanket conservatism.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="nstests">
+    <h3><span class="sect">I.7</span>Conformance suite</h3>
+    <p>Fourteen offline checks, no simulator, no learning framework. Port all of them; each corresponds to a requirement above and each has failed at least once during development.</p>
+    <pre class="block">operator     zero_diagonal · asymmetric_and_spread · n1_gives_exactly_zero_peer_load
+dial         identity_at_zero_is_exact · monotone_and_never_generous
+             placebo_regime_is_exactly_inert · anchored_to_published_constant
+harm         identity_when_the_dial_is_off · monotone_in_severity
+             sensor_uses_the_binding_element_not_the_mean
+ceiling      shares_are_a_partition · all_controllable_has_no_irreducible_share
+             gap_grows_with_fleet_share · placebo_produces_no_excess_to_attribute</pre>
+  </section>
+
+  <hr class="div">
+
+  <!-- ═══════════════════════════ PART II ═══════════════════════════ -->
+  <div class="part">
+    <span class="part-tag">Part II</span>
+    <h2>PACT‑1</h2>
+    <p class="lead">Online identification of a cross-agent coupling from each agent's own proprioceptive residual, with reliance on the estimate learned from return.</p>
+  </div>
+
+  <section id="reduction">
+    <h3><span class="sect">II.1</span>The reduction</h3>
+    <p>The whole method rests on collapsing an <em>N</em>-agent, many-element coupling into a handful of parameters that do not scale with either.</p>
+    <div class="eq">y_i(t)  =  β*(t) · ψ_i(t) ,     ψ_i = [ 1, x_1, …, x_r ]
+
+x_m,i  =  Σ_{j ≠ i}  O_ij · G_m[ path(i), path(j) ]     <span class="cm">exact arithmetic, no estimation</span></div>
+    <p>Read that as: <em>project the unknown per-element sensitivity field onto r known element classes.</em> The classes are public infrastructure — a road's lane count and speed limit are painted on it. What is <strong>not</strong> handed over is β*: how much a peer unit on each class actually costs today. That drifts as the operating point moves along the performance curve, and must be tracked online.</p>
+    <div class="req">
+      <div class="req-id">P‑1.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — r is independent of the number of agents and of the number of elements. If your candidate reduction has a parameter per agent or per element, it is not this method.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑1.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Know the model class, estimate the parameters.</strong> The basis is declared from environment structure that exists before training. Inventing the basis alongside the coupling — which is what a synthetic benchmark lets you do — makes the identification claim vacuous.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sensor">
+    <h3><span class="sect">II.2</span>The sensor</h3>
+    <div class="req">
+      <div class="req-id">P‑2.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — The target is the agent's own <strong>relative</strong> excess over its own nominal, and nothing else:</p>
+        <div class="eq">y_i = clip( realized_i / nominal_i − 1 ,  −1 ,  y_clip )      <span class="cm">y_clip = 10, declared</span></div>
+        <p>This is proprioception, not privilege: every participant knows how long its own operation took and what it would have cost on an empty medium. Relative rather than absolute removes path-length scaling and matches the performance function's own form.</p>
+        <p><span class="modal">MUST NOT</span> use any quantity an agent could not physically observe. <span class="modal">MUST</span> report <code>clip_frac</code>; the clip bounds outliers that would otherwise dominate a least-squares fit, and it is a declared constant, never tuned toward a curve.</p>
+        <span class="gate">gated by <b>test_relative_excess_and_clip</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="basis">
+    <h3><span class="sect">II.3</span>The basis</h3>
+    <div class="req">
+      <div class="req-id">P‑3.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Zero-diagonal.</strong> Every channel excludes the agent's own contribution, so the sum is strictly over <code>j ≠ i</code>. A lone agent must read exactly zero on every channel. This is the same signature as <a href="#signature">I.2</a> and is what makes the estimated quantity a <em>coupling</em> rather than a self-effect.</p>
+        <span class="gate">gated by <b>test_basis_zero_diagonal_and_N1</b>, <b>test_basis_waveform_arithmetic</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑3.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Verify a vectorised implementation against a brute-force loop written straight off the definition, at startup, and abort on mismatch. Index order and self-exclusion are exactly the kind of wiring bug that leaves every diagnostic looking healthy.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑3.3</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Centre and scale the regressor on a geometric reference.</strong> Compute the load each agent would see if every peer acted uniformly at random — a function of structure and schedule only, so no run data enters — and centre on that.</p>
+        <p>Measured in the source implementation: raw channels carried a large common mean against an intercept column of 1, giving a design-matrix condition number ≈1.3×10⁵. The intercept and the class channels then trade off and the <em>split</em> becomes unidentifiable even though prediction is fine. Centring dropped it to 24 (class-segregated) and 336 (class-mixed), and moved β recovery from unidentifiable to 0.001 / 0.012 error.</p>
+        <span class="gate">gated by <b>test_end_to_end_recovers_a_known_congestion_law</b>, <b>test_mixed_class_city_is_harder_but_still_identifiable</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑3.4</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Prune degenerate channels (below a declared share of the medium, or below a declared variance) and keep every downstream index aligned when you do. <span class="modal">MUST</span> verify that the basis's ordering of options matches the environment's own — a permuted order points every channel at the wrong element while looking perfectly healthy.</p>
+        <span class="gate">gated by <b>test_channel_pruning_keeps_everything_aligned</b>, <b>test_channel_variation_flags_a_constant_channel</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="estimator">
+    <h3><span class="sect">II.4</span>The estimator</h3>
+    <p>Per-agent recursive least squares with a forgetting factor, one row per agent per step: its own realized residual against the channels of the option it actually took.</p>
+    <div class="eq">K   = P φ / ( μ + φᵀ P φ )
+β  ← β + K ( y − φᵀ β )
+P  ← ( P − K (Pφ)ᵀ ) / μ ,   then symmetrised
+
+μ = 0.999   p₀ = 10.0                       <span class="cm">declared; sweep, never tune</span></div>
+    <div class="req">
+      <div class="req-id">P‑4.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Decentralized. Agent <em>i</em> never sees another agent's residual. It sees only peers' executed actions, which a connected fleet broadcasts anyway.</p>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑4.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Skip rows whose regressor is numerically zero.</strong> A dead row carries no information about β but still divides P by μ, inflating the covariance every step and silently tightening the effective forgetting factor. This is covariance windup, and it makes μ stop meaning what your banner says it means.</p>
+        <span class="gate">gated by <b>test_rls_dead_row_does_not_inflate_covariance</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑4.3</div>
+      <div class="req-body">
+        <p><span class="modal">SHOULD</span> — Treat μ as the bias/variance dial of a tracking floor of order <code>√(noise · drift)</code>. It cannot be tuned away, only balanced. Declare it, sweep it in the ablation, and never present a swept value as a default.</p>
+        <span class="gate">gated by <b>test_rls_recovers_known_beta</b>, <b>test_rls_tracks_drift</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="trust">
+    <h3><span class="sect">II.5</span>Trust</h3>
+    <div class="eq">g = g_max · sigmoid( w + bias ) ,  EMA-smoothed,  gated by confidence
+bias = 2.2  ⟹  w = 0 sits at 0.90 · g_max</div>
+    <div class="req">
+      <div class="req-id">P‑5.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — <strong>Invert the prior.</strong> Start near full reliance, not at half. The estimator already supplies the magnitude, so this knob tracks nothing: whenever the estimate is right, optimal trust is a constant. Initialising at half starts at half of a known-correct answer and asks a weak, noisy policy gradient to walk uphill to it.</p>
+        <p>Measured in the source implementation on the Ant instance: over 10M steps trust drifted 0.485 → 0.444 while the estimate's cosine similarity to truth sat at 0.99 — the entire budget spent at half compensation with a correct waveform. Return 3642 against 5444 for the inverted prior.</p>
+        <span class="gate">gated by <b>test_trust_prior_is_inverted</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑5.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Gate reliance on <strong>prediction</strong> uncertainty, not on the trace of the covariance:</p>
+        <div class="eq">conf = 1 / ( 1 + r · ψᵀPψ / ( p₀ · ‖ψ‖² ) )</div>
+        <p>The compensator only ever uses the scalar <code>β̂·ψ</code>, so the uncertainty that matters is that scalar's. Directions the data never excites are also directions the prediction never uses.</p>
+        <p>The trace version is a trap. tr(P) is dominated by the <em>least</em> excited direction, and RLS with forgetting inflates exactly those without bound — so once the fleet converges and actions stop varying, tr(P) grows even though prediction stays perfect, and the gate quietly disarms a working compensator. Measured: confidence fell 0.20 → 0.005 over 4200 steps while fit R² sat at 0.9998, taking applied trust to 0.003 and reducing the arm to the plain baseline.</p>
+        <span class="gate">gated by <b>test_confidence_cold_to_warm</b>, <b>test_pred_confidence_survives_dead_excitation</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑5.3</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Report policy-set trust and <em>applied</em> trust as separate columns. They diverge precisely when the confidence gate is misbehaving, which is the failure above.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="channel">
+    <h3><span class="sect">II.6</span>The channel: does exact compensation transfer?</h3>
+    <p class="lead">This is the porting decision that most changes what you can claim, and it must be settled before any code is written.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Environment property</th><th>Channel</th><th>What you may claim</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>An additive, invertible harm.</strong> The disturbance enters the same space as an action, so it can be subtracted off.</td>
+            <td>Exact channel inverse. Compensation restores the stationary game.</td>
+            <td>Identification <em>and</em> compensation.</td>
+          </tr>
+          <tr>
+            <td><strong>No inverse.</strong> The harm is a property of a shared medium and no action cancels it — you cannot subtract minutes off a congested road.</td>
+            <td>Trust-weighted prior over discrete options. The estimator ranks; trust decides how hard the ranking bites.</td>
+            <td>Identification and <em>steering</em> only. Say this plainly in the paper.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The substitute channel used in the reference instance, where no inverse exists:</p>
+    <div class="eq">z_k      = zscore over the agent's valid options of predicted cost_k
+logits_k = logits_k − g · κ · z_k                         <span class="cm">κ = 1.0, declared</span></div>
+    <div class="req">
+      <div class="req-id">P‑6.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Make the shift dimensionless. The z-score is what lets κ be a single declared constant rather than a per-instance scale factor that would need tuning — and a tuned κ is a tuned result.</p>
+        <span class="gate">gated by <b>test_steer_direction</b>, <b>test_steer_degenerate_cases</b></span>
+      </div>
+    </div>
+    <div class="req">
+      <div class="req-id">P‑6.2</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Reach the trust parameter through the existing objective, with no new sampled dimension and no extra log-probability term. Because the shift sits inside the softmax, <code>log π(k|s) = log softmax(logits − g(w)·κ·z)_k</code> already depends on w, so the ordinary policy gradient flows into it. The host's clipped surrogate, entropy bonus and optimiser stay byte-for-byte unchanged — an arm difference must not be able to be an algorithm difference.</p>
+        <span class="gate">gated by <b>test_policy_runs_and_trust_head_receives_gradient</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="floor">
+    <h3><span class="sect">II.7</span>The floor property</h3>
+    <div class="req">
+      <div class="req-id">P‑7.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — At <code>g = 0</code> the method returns the untouched host policy <strong>exactly</strong> — bit for bit, for <em>any</em> β̂, however wrong — and the same must hold when all predicted values are identical, where the shift is defined to be zero rather than NaN.</p>
+        <p>The estimator therefore sits entirely outside the worst-case decision path. A diverging estimate can fail to help; it cannot drag the arm below the baseline it wraps. This is the property that makes the method safe to propose, and it is cheap to hold only if you gate it — so gate it, before a single episode is simulated, in both the numerical and the differentiable implementation.</p>
+        <span class="gate">gated by <b>test_floor_property_is_exact</b>, <b>test_blind_arm_is_exactly_the_untouched_policy</b>, <b>test_torch_numpy_parity</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="commons">
+    <h3><span class="sect">II.8</span>The compensation commons</h3>
+    <p>Steering onto the option the model says is cheap is exactly what <em>loads</em> that option. This is Wardrop/Braess in traffic, and it is a general property of any medium-mediated coupling: the compensation feeds the thing it compensates against.</p>
+    <div class="req">
+      <div class="req-id">P‑8.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Log the externality, and <span class="modal no">MUST NOT</span> act on it. A concentration index over the fleet's choices (normalised Herfindahl, 0 = perfectly spread, 1 = everyone on one option) plus the fraction of agents that switched option. Rising concentration alongside rising trust <em>is</em> the externality becoming visible.</p>
+        <p>Acting on it would make the method a mechanism rather than a per-agent estimator, and would break the decentralization claim of P‑4.1.</p>
+        <span class="gate">gated by <b>test_herd_index_bounds</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="gates">
+    <h3><span class="sect">II.9</span>Gates</h3>
+    <p>Seven checkpoints. The first five run before or near the start of a run; gate 6 is the one that saves compute.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="mono">#</th><th>When</th><th>Check</th><th>On failure</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">1</td><td>startup</td><td>Vectorised basis equals the brute-force definition</td><td><strong>abort</strong> — wiring bug</td></tr>
+          <tr><td class="mono">2</td><td>startup</td><td><code>g=0</code> is an exact no-op; <code>g=1</code> moves the decision</td><td><strong>abort</strong></td></tr>
+          <tr><td class="mono">2b</td><td>startup</td><td>Differentiable shift equals the numerical shift</td><td><strong>abort</strong></td></tr>
+          <tr><td class="mono">3</td><td>startup</td><td>A lone agent reads exactly zero peer load</td><td><strong>abort</strong></td></tr>
+          <tr><td class="mono">4</td><td>startup</td><td>Basis option order matches the environment's own</td><td><strong>abort</strong> — the one silent catastrophe</td></tr>
+          <tr><td class="mono">5</td><td>early</td><td>The channels are not inert</td><td><strong>abort</strong></td></tr>
+          <tr><td class="mono">6</td><td>~7% in</td><td>Rolling <code>fit_gain</code> above a declared floor</td><td><strong>abort</strong> — the reduction does not hold here</td></tr>
+          <tr><td class="mono">7</td><td>~7% in</td><td>Condition number of the design matrix</td><td>warn only — see below</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><b>Why gate 7 warns rather than aborts.</b> A degenerate regressor still <em>predicts</em>; it just cannot decompose β into per-channel terms. That is a limit on what you may claim, not a broken run — so the run continues and the claim narrows. Conflating the two is how a paper ends up asserting a decomposition it did not earn.</p>
+    </div>
+  </section>
+
+  <section id="panel">
+    <h3><span class="sect">II.10</span>The instrument panel</h3>
+    <p>One row per step. The design principle: <strong>keep "is the method working" and "is it winning" in separate columns</strong>, because the method can work perfectly and still not win, and that is a statement about how much headroom the domain has — not a bug.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Column</th><th>Question it answers</th><th>Healthy</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">fit_gain</td><td>Does the reduction hold here at all? β̂·ψ against the <em>true</em> channels, minus an intercept-only null.</td><td>rises, stays up</td></tr>
+          <tr><td class="mono">pred_gain</td><td>Is peer load predictable one step ahead? The forecast actually used, scored the same way.</td><td>below fit, positive</td></tr>
+          <tr><td class="mono">cond_psi</td><td>Can β be decomposed, or only used?</td><td>low; warn if high</td></tr>
+          <tr><td class="mono">trust_pol / trust_app</td><td>Policy-set versus applied reliance. Divergence means the confidence gate is misfiring.</td><td>together</td></tr>
+          <tr><td class="mono">x_* , x_std</td><td>Channel liveness — is there anything to identify?</td><td>non-zero</td></tr>
+          <tr><td class="mono">herd_index</td><td>Is steering creating the commons externality?</td><td>logged, not fixed</td></tr>
+          <tr><td class="mono">clip_frac</td><td>How much of the sensor is being clipped?</td><td>small, reported</td></tr>
+          <tr><td class="mono">domain metric</td><td>Is it winning, in the benchmark's own units and against your own matched baseline?</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><b>Use gain, not raw R².</b> Raw fit R² is inflated by the per-agent intercept memorising each agent's typical residual. Subtracting an intercept-only null is what makes the number mean "the peer channels explained something".</p>
+      <p><b>High fit with low prediction is a finding, not a bug.</b> It says the physics is right but the population is changing faster than your forecast smoother can track. Keeping the two columns apart is what stops a bad number being blamed on the wrong thing.</p>
+    </div>
+  </section>
+
+  <section id="arms">
+    <h3><span class="sect">II.11</span>Arms</h3>
+    <div class="req">
+      <div class="req-id">P‑9.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Ship three arms through the <em>identical</em> wrapper, differing only in the trust term.</p>
+        <div class="tw" style="margin-top:12px">
+          <table>
+            <thead><tr><th class="mono">arm</th><th>trust</th><th>What it isolates</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">learned</td><td>from the policy</td><td>the method</td>
+              </tr>
+              <tr><td class="mono">off</td><td>forced to 0</td><td>the honest baseline — same wrapper, same observation, same seed, provably bit-identical to the untouched host</td></tr>
+              <tr><td class="mono">fixed</td><td>constant</td><td>is trust <em>learned</em>, or merely well-initialised?</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:12px">The <code>fixed</code> arm is not optional politeness. Given P‑5.1's inverted prior, a reviewer will reasonably ask whether the learning does anything at all — and this arm is the only thing that answers it.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div">
+
+  <!-- ═══════════════════════════ PART III ═══════════════════════════ -->
+  <div class="part">
+    <span class="part-tag">Part III</span>
+    <h2>Porting to a new environment</h2>
+    <p class="lead">Answer the questionnaire before writing code. Two of these questions can disqualify a domain outright, and finding that out on day one is worth more than any of the engineering that follows.</p>
+  </div>
+
+  <section id="port">
+    <h3><span class="sect">III.1</span>Feasibility questionnaire</h3>
+    <ol class="qlist">
+      <li>
+        <span class="q">Is there a shared medium with a published capacity?</span>
+        <span class="a">You need a denominator that a practitioner would recognise and a number they would defend. <b>No medium, no method</b> — the coupling has nowhere to live and the operator has nothing to divide by.</span>
+      </li>
+      <li>
+        <span class="q">Can you write down W from structure, before any run?</span>
+        <span class="a">Incidence over capacity, or the domain's equivalent sensitivity matrix. If you can only <em>fit</em> it, stop: a fitted operator makes the identification claim circular, and the flat-proxy fallback is measurably worse than nothing.</span>
+      </li>
+      <li>
+        <span class="q">Does each agent observe its own realized-versus-nominal outcome?</span>
+        <span class="a">Proprioception, not privilege. If the residual is only available centrally, the decentralization claim goes — you may still run the method, but say so.</span>
+      </li>
+      <li>
+        <span class="q">Is there an exogenous driver a practitioner names unprompted?</span>
+        <span class="a">Ask them: "what makes this harder on some days, that nobody here controls?" If the honest answer is "nothing", <b>you have no NS to inject</b> and Part I does not apply — but Part II still can, on the environment's native coupling at σ = 0.</span>
+      </li>
+      <li>
+        <span class="q">Does the harm have an inverse?</span>
+        <span class="a">Decides whether you claim compensation or only steering (<a href="#channel">II.6</a>). Both are publishable; conflating them is not.</span>
+      </li>
+      <li>
+        <span class="q">What is the coordination gap?</span>
+        <span class="a">Compute it before writing method code. A small gap means the environment is a poor showcase — that is a result about the domain, and reporting it costs you an hour instead of a month.</span>
+      </li>
+      <li>
+        <span class="q">Is the medium loaded enough for a capacity loss to matter?</span>
+        <span class="a">Check the loading distribution. A medium sitting far below its limit cannot express the disturbance however large σ grows — and this determines your performance function's exponent (see below).</span>
+      </li>
+    </ol>
+    <div class="paid">
+      <span class="tag">Regime, not convention</span>
+      <p>Take the performance function's exponent from the operating regime you measured, not from the textbook. The classic traffic coefficients (α=0.15, β=4) are calibrated near capacity; the reference instance runs two orders of magnitude below it, where a quartic term is numerically dead — a 14% capacity loss at v/c = 0.2 would change the outcome by 0.02%.</p>
+      <p>In the low-utilisation regime the correct form is linear: queueing delay is <code>ρ/(1−ρ) ≈ ρ</code> for small ρ. Then calibrate the single coefficient <em>once</em> against an observable and state the one-line procedure — here, mean realized/nominal − 1 = 0.50 divided by mean loading 0.219, giving α = 2.28. That is a stated procedure against a measurement, not a knob turned toward a result, and it belongs in the ablation table either way.</p>
+    </div>
+  </section>
+
+  <section id="instantiate">
+    <h3><span class="sect">III.2</span>Instantiating the four objects</h3>
+    <p>The same four slots, filled from three domains. The first two are implemented; the rest are worked sketches showing what a conforming answer looks like.</p>
+    <div class="tw">
+      <table>
+        <caption>Every row's driver shrinks capacity and never adds to the loss — that is the pattern to preserve, not the choice of weather.</caption>
+        <thead><tr><th>Domain</th><th>Medium &amp; loading</th><th>Declared operator</th><th>Exogenous driver</th><th>Anchor</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Urban routing</strong><br><span class="mono" style="color:var(--faint)">implemented</span></td>
+            <td>Link volume-to-capacity ratio on the binding link</td>
+            <td>Link–path incidence ÷ link capacity</td>
+            <td>Rainfall reducing road capacity</td>
+            <td>HCM capacity adjustment factor, 14%</td>
+          </tr>
+          <tr>
+            <td><strong>Power dispatch</strong><br><span class="mono" style="color:var(--faint)">implemented</span></td>
+            <td>Line flow ÷ thermal rating, on the binding line</td>
+            <td>PTDF matrix</td>
+            <td>Ambient temperature derating ampacity</td>
+            <td>IEEE 738 ampacity derating</td>
+          </tr>
+          <tr>
+            <td><strong>Datacenter scheduling</strong><br><span class="mono" style="color:var(--faint)">sketch</span></td>
+            <td>Rack power draw ÷ breaker limit, on the binding rack</td>
+            <td>Job–rack placement ÷ rack capacity</td>
+            <td>Inlet temperature cutting safe power envelope</td>
+            <td>ASHRAE thermal envelope class</td>
+          </tr>
+          <tr>
+            <td><strong>Wireless scheduling</strong><br><span class="mono" style="color:var(--faint)">sketch</span></td>
+            <td>Offered load ÷ cell capacity, on the binding cell</td>
+            <td>User–cell association ÷ cell capacity</td>
+            <td>Rain fade cutting spectral efficiency</td>
+            <td>ITU‑R P.838 rain attenuation</td>
+          </tr>
+          <tr>
+            <td><strong>Port / freight</strong><br><span class="mono" style="color:var(--faint)">sketch</span></td>
+            <td>Berth occupancy ÷ berth throughput</td>
+            <td>Vessel–berth incidence ÷ crane rate</td>
+            <td>Wind speed suspending crane operation</td>
+            <td>Published crane wind-limit curve</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><b>If no driver exists, stop at Part II.</b> An environment with a genuine native coupling and no plausible exogenous driver is still a perfectly good testbed for identification — you run everything at σ=0 and claim the reduction, not robustness to drift. Manufacturing a driver the domain does not have is precisely the self-designed-benchmark critique you are trying to escape.</p>
+    </div>
+  </section>
+
+  <section id="recipe">
+    <h3><span class="sect">III.3</span>Build order</h3>
+    <p>Ordered so that the cheapest disqualifying result arrives first. Each step's output is committed before the next begins.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="mono">step</th><th>Do</th><th>Cost</th><th>Kills the project if…</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">1</td><td>Answer the questionnaire with a domain practitioner</td><td>an afternoon</td><td>Q1, Q2 or Q4 has no honest answer</td></tr>
+          <tr><td class="mono">2</td><td>Build medium, operator and basis from structure files; run the structural conformance tests</td><td>a day</td><td>operator is flat or symmetric</td></tr>
+          <tr><td class="mono">3</td><td>Compute the ceiling decomposition; <strong>commit it</strong></td><td>minutes</td><td>coordination gap is small</td></tr>
+          <tr><td class="mono">4</td><td>Build the driver and dial; run the four dial checks plus the placebo check</td><td>hours</td><td>no exact-zero regime exists</td></tr>
+          <tr><td class="mono">5</td><td>Offline estimator self-test on a synthetic instance with a <em>known</em> law</td><td>seconds</td><td>β is not recovered — the arithmetic is wrong, not the domain</td></tr>
+          <tr><td class="mono">6</td><td>Wire the wrapper; verify the dial reaches rewards <em>and</em> records</td><td>a day</td><td>records unharmed — every metric is then wrong</td></tr>
+          <tr><td class="mono">7</td><td>Maximum-excitation probe: uniform random actions, short run, read fit gain</td><td>~1.5% of a full run</td><td>fit gain near zero — a full run cannot help</td></tr>
+          <tr><td class="mono">8</td><td>Full sweep: all arms, all seeds, σ = 0 and σ &gt; 0 from the identical launcher</td><td>the budget</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Step 7 is the one people skip and should not. A probe with uniformly random actions is the best case for identification — maximum excitation — so a fit gain near zero there is decisive, and it costs a fiftieth of the full run.</p>
+    <div class="req">
+      <div class="req-id">P‑10.1</div>
+      <div class="req-body">
+        <p><span class="modal">MUST</span> — Every arm in the comparison is launched through the same entry point, with severity supplied from outside the method. In the reference instance this is a launcher that substitutes the wrapped environment class before the target script imports it, so the baselines are bit-for-bit the ones their authors shipped and the only new object is the environment they run in.</p>
+        <p>The alternative — editing each baseline to accept a severity flag — makes every one of them a modified baseline, and a reviewer will rightly ask what else changed.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="paidfor">
+    <h3><span class="sect">III.4</span>Failures already paid for</h3>
+    <p>Each of these was measured during development of the reference implementation. They are recorded here so a port does not rediscover them at full price.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Shortcut</th><th>What it cost</th><th>Requirement</th></tr></thead>
+        <tbody>
+          <tr><td>Averaging the loading sensor over all elements instead of taking the max</td><td>Applied compensation 6× too low at identical settings</td><td class="mono">NS‑1.1</td></tr>
+          <tr><td>A flat geometric proxy for W instead of the real weights</td><td>fit gain −0.0045 — worse than an intercept-only null</td><td class="mono">NS‑1.2</td></tr>
+          <tr><td>Scaling a two-sided physical law by σ</td><td>The task became strictly <em>easier</em> at σ = 2</td><td class="mono">NS‑2.3</td></tr>
+          <tr><td>Harming rewards but not records</td><td>A non-learning baseline scored identically at σ=0 and σ=3 to six decimals</td><td class="mono">NS‑3.2</td></tr>
+          <tr><td>Uncentred regressor against an intercept column</td><td>Condition number 1.3×10⁵; the per-channel split unidentifiable while prediction looked fine</td><td class="mono">P‑3.3</td></tr>
+          <tr><td>Learning the channel sensitivity instead of declaring it</td><td>Estimate 0.13 with standard error 5.0 — never once cleared a t&gt;3 bar in 5004 windows, because excitation dies as the policy converges</td><td class="mono">P‑1.2</td></tr>
+          <tr><td>Trust prior at 0.5</td><td>Trust drifted 0.485 → 0.444 over 10M steps against a 0.99-accurate estimate; return 3642 versus 5444</td><td class="mono">P‑5.1</td></tr>
+          <tr><td>Trace-based confidence gate</td><td>Confidence 0.20 → 0.005 while fit R² held at 0.9998; applied trust 0.003, arm reduced to the plain baseline</td><td class="mono">P‑5.2</td></tr>
+          <tr><td>Feeding dead rows to RLS</td><td>Covariance windup; μ silently stops meaning what it says</td><td class="mono">P‑4.2</td></tr>
+          <tr><td>Trusting the option ordering of a generated table</td><td>Every channel aims at the wrong element while all diagnostics look healthy</td><td class="mono">P‑3.4</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p><strong>Provenance.</strong> Both specs are extracted from a working implementation: the NS form from <code>urb_ns/</code> and <code>scripts/ns_launch.py</code>, the method from <code>pact1/</code>. Requirement IDs are introduced by this document; test names are the implementation's own. Numeric results attributed to POWER, Ant and SMAC instances are quoted from that implementation's records and were not independently re-derived here.</p>
+    <p><strong>Reference instance.</strong> 222 participants, 89 controllable, 215 origin–destination pairs × 4 options over 745 elements; capacity = lanes × 600 units/hour; driver period 100 with half the cycle exactly inert; σ = 1 anchored at a 14% capacity loss.</p>
+  </footer>
+
+  </main>
+</div>
+</div>

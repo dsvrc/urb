@@ -1,0 +1,943 @@
+<title>PACT‑1 Proof Obligations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+  svg: { fontCache: "global" },
+  options: { enableMenu: false }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+
+<style>
+:root{
+  --paper:#f6f8f6; --panel:#eef1ee; --sunk:#e5e9e6; --ink:#141b19; --muted:#5b6a66;
+  --faint:#8a9793; --rule:#ccd4d0; --hair:#dde3df; --accent:#1d5f58; --accent-soft:#dce9e6;
+  --signal:#9c4212; --signal-soft:#f2e3d8; --shade:#e3ebe8; --sel:#cfe4df;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0e1412; --panel:#151d1a; --sunk:#1a2320; --ink:#dde5e1; --muted:#93a29d;
+    --faint:#6d7c77; --rule:#2a3733; --hair:#212c29; --accent:#63b6ab; --accent-soft:#152a27;
+    --signal:#dd8d5c; --signal-soft:#2a1d14; --shade:#17211e; --sel:#1f3d38;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0e1412; --panel:#151d1a; --sunk:#1a2320; --ink:#dde5e1; --muted:#93a29d;
+  --faint:#6d7c77; --rule:#2a3733; --hair:#212c29; --accent:#63b6ab; --accent-soft:#152a27;
+  --signal:#dd8d5c; --signal-soft:#2a1d14; --shade:#17211e; --sel:#1f3d38;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:"Spectral",Georgia,"Times New Roman",serif;font-size:16.5px;line-height:1.62}
+::selection{background:var(--sel);color:var(--ink)}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px 96px}
+.masthead{border-bottom:2px solid var(--ink);padding:44px 0 20px}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;margin:0 0 14px}
+h1{font-family:"Spectral",Georgia,serif;font-weight:600;font-size:clamp(34px,5.6vw,58px);line-height:1.02;letter-spacing:-.018em;margin:0 0 16px;text-wrap:balance}
+.standfirst{font-size:clamp(17px,2.1vw,20px);line-height:1.52;color:var(--muted);max-width:64ch;margin:0 0 22px;font-weight:300}
+.meta{display:flex;flex-wrap:wrap;gap:6px 30px;font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint)}
+.meta b{color:var(--muted);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+
+.cols{display:grid;grid-template-columns:210px minmax(0,1fr);gap:0 52px;align-items:start}
+.rail{position:sticky;top:20px;padding-top:34px;font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;max-height:calc(100vh - 20px);overflow-y:auto}
+.rail h4{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin:0 0 10px;font-weight:600}
+.rail ol{list-style:none;margin:0 0 24px;padding:0;font-size:13.5px;line-height:1.4}
+.rail li{margin:0 0 3px}
+.rail a{color:var(--muted);text-decoration:none;display:block;padding:2px 0 2px 10px;margin-left:-12px;border-left:2px solid transparent}
+.rail a:hover{color:var(--accent);border-left-color:var(--accent)}
+.rail a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rail .num{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);margin-right:7px}
+main{padding-top:34px;min-width:0}
+
+.part{padding-top:14px}
+.part-tag{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--signal);font-weight:600}
+h2{font-family:"Spectral",Georgia,serif;font-weight:600;font-size:clamp(25px,3.4vw,34px);line-height:1.12;letter-spacing:-.012em;margin:6px 0 8px;text-wrap:balance}
+h3{font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:700;font-size:19px;line-height:1.24;margin:36px 0 10px;text-wrap:balance}
+h3 .sect{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);margin-right:9px;font-weight:600}
+h4{font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:600;font-size:15px;margin:22px 0 6px}
+p{margin:0 0 14px;max-width:66ch}
+ul{margin:0 0 16px;padding-left:20px;max-width:64ch}
+li{margin:0 0 7px}
+a{color:var(--accent)}
+strong{font-weight:600}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86em;background:var(--sunk);padding:1px 4px;border-radius:2px}
+.lead{font-size:17.5px;color:var(--muted);max-width:64ch;font-weight:300}
+hr.div{border:0;border-top:1px solid var(--rule);margin:44px 0}
+mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;max-width:100%;padding:2px 0}
+.dm{margin:10px 0 14px}
+
+/* status chips: pine family = established, burnt family = still owed */
+.chip{display:inline-block;font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;padding:2px 7px;border-radius:2px;line-height:1.5;white-space:nowrap;vertical-align:middle}
+.chip.proved{background:var(--accent);color:var(--paper)}
+.chip.checked{border:1px solid var(--accent);color:var(--accent);padding:1px 6px}
+.chip.classical{border:1px solid var(--rule);color:var(--muted);padding:1px 6px}
+.chip.strategy{border:1px solid var(--signal);color:var(--signal);padding:1px 6px}
+.chip.conjecture{background:var(--signal-soft);color:var(--signal);border:1px solid var(--signal);padding:1px 6px}
+
+/* theorem block */
+.thm{margin:26px 0 30px;border-top:1.5px solid var(--ink);padding-top:12px}
+.thm-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin-bottom:10px}
+.thm-kind{font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:700;font-size:16px}
+.thm-id{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--accent);font-weight:600}
+.thm-title{font-family:"Spectral",Georgia,serif;font-style:italic;font-size:17px;color:var(--ink)}
+.thm-chips{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.statement{background:var(--panel);border-left:3px solid var(--accent);padding:12px 18px;margin:0 0 12px}
+.statement p{margin:0 0 8px;max-width:none}
+.statement p:last-child{margin-bottom:0}
+.reading{font-size:15.5px;color:var(--muted)}
+.proof{border-left:1px solid var(--rule);padding:2px 0 2px 16px;margin:12px 0;font-size:15.5px}
+.proof p{max-width:62ch}
+.proof .lbl{font-style:italic;font-weight:600}
+.qed{float:right;color:var(--faint)}
+.check{background:var(--shade);padding:10px 16px;margin:12px 0;font-size:14.5px}
+.check .lbl,.obl .lbl,.verify .lbl{font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}
+.check .lbl{color:var(--accent)}
+.check p{margin:0 0 6px;max-width:none}
+.check p:last-child{margin:0}
+.mono{font-family:"IBM Plex Mono",monospace;font-size:12.8px;font-variant-numeric:tabular-nums}
+.obl{margin:12px 0 0;font-size:15px;padding-top:8px;border-top:1px dashed var(--rule)}
+.obl .lbl{color:var(--muted);display:inline;margin-right:8px}
+.verify{background:var(--signal-soft);border-left:3px solid var(--signal);padding:10px 16px;margin:12px 0;font-size:15px}
+.verify .lbl{color:var(--signal)}
+.verify p{margin:0;max-width:none}
+.verify p + p{margin-top:8px}
+.note{background:var(--shade);padding:14px 18px;margin:16px 0;border-left:3px solid var(--rule)}
+.note p{margin:0;font-size:15.5px;max-width:64ch}
+.note p + p{margin-top:9px}
+
+.tw{overflow-x:auto;margin:18px 0 22px;border-top:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+thead th{font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:9px 14px 9px 0;border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody td{padding:9px 14px 9px 0;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.45}
+tbody tr:last-child td{border-bottom:0}
+td.id{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--accent);font-weight:600;white-space:nowrap}
+td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+caption{caption-side:bottom;text-align:left;font-size:13px;color:var(--faint);padding-top:9px;font-style:italic}
+
+.corr{counter-reset:c;list-style:none;padding:0;margin:14px 0 0;max-width:none}
+.corr li{counter-increment:c;position:relative;padding:12px 0 12px 34px;border-top:1px solid var(--hair);margin:0}
+.corr li::before{content:counter(c);position:absolute;left:0;top:12px;font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;color:var(--signal)}
+.foot{margin-top:56px;padding-top:20px;border-top:2px solid var(--ink);font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;font-size:13px;color:var(--faint)}
+.foot p{max-width:72ch;margin:0 0 8px}
+
+@media (max-width:900px){
+  .cols{grid-template-columns:1fr}
+  .rail{position:static;max-height:none;padding-top:24px;border-bottom:1px solid var(--rule)}
+  .rail ol{columns:2;column-gap:26px}
+  .thm-chips{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="masthead">
+  <p class="eyebrow">Theory programme · companion to Coupling Under Drift</p>
+  <h1>PACT‑1 Proof Obligations</h1>
+  <p class="standfirst">Every theorem the PACT‑1 paper can carry, stated against the actual implementation: what is proved here, what is owed, what each result predicts, and the experiment that checks it. Numbers marked checked were recomputed on 16 September 2026 from the committed NS certificate and the code.</p>
+  <div class="meta">
+    <span><b>Instance</b> URB · saint_arnoult · 222 travellers · 89 controllable</span>
+    <span><b>Statements</b> 25</span>
+    <span><b>Parts</b> A equilibrium · B trust · C identification · D safety · E evaluation</span>
+  </div>
+  <div class="legend" aria-label="Status legend">
+    <span><i class="chip proved">proved here</i> proof given below</span>
+    <span><i class="chip checked">checked</i> number verified this session</span>
+    <span><i class="chip classical">classical</i> cite; verify exact statement</span>
+    <span><i class="chip strategy">strategy</i> proof plan, difficulty named</span>
+    <span><i class="chip conjecture">conjecture</i> evidence, no proof</span>
+  </div>
+</header>
+
+<div class="cols">
+<nav class="rail" aria-label="Contents">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#thesis"><span class="num">0</span>The organising gap</a></li>
+    <li><a href="#model"><span class="num">1</span>Formal model</a></li>
+    <li><a href="#map"><span class="num">2</span>Theorem map</a></li>
+    <li><a href="#A1"><span class="num">A1</span>Exact potential</a></li>
+    <li><a href="#A2"><span class="num">A2</span>Smoothness</a></li>
+    <li><a href="#A3"><span class="num">A3</span>Tightness</a></li>
+    <li><a href="#A4"><span class="num">A4</span>Severity invariance</a></li>
+    <li><a href="#A5"><span class="num">A5</span>Scaling law</a></li>
+    <li><a href="#A6"><span class="num">A6</span>Harm-layer transfer</a></li>
+    <li><a href="#A7"><span class="num">A7</span>Light traffic</a></li>
+    <li><a href="#A8"><span class="num">A8</span>Gap decomposition</a></li>
+    <li><a href="#B1"><span class="num">B1</span>Steered QRE</a></li>
+    <li><a href="#B2"><span class="num">B2</span>Performative stability</a></li>
+    <li><a href="#B3"><span class="num">B3</span>Two-option Braess</a></li>
+    <li><a href="#B4"><span class="num">B4</span>Trust game</a></li>
+    <li><a href="#C1"><span class="num">C1</span>Tracking floor</a></li>
+    <li><a href="#C2"><span class="num">C2</span>Trace collapse</a></li>
+    <li><a href="#C3"><span class="num">C3</span>Confidence floor</a></li>
+    <li><a href="#C4"><span class="num">C4</span>Excitation bound</a></li>
+    <li><a href="#C5"><span class="num">C5</span>Conditioning</a></li>
+    <li><a href="#C6"><span class="num">C6</span>Non-identifiability</a></li>
+    <li><a href="#Cstar"><span class="num">C★</span>Stability erodes</a></li>
+    <li><a href="#D1"><span class="num">D1</span>Nesting</a></li>
+    <li><a href="#D2"><span class="num">D2</span>Deviation bound</a></li>
+    <li><a href="#D3"><span class="num">D3</span>Trust gradient</a></li>
+    <li><a href="#D4"><span class="num">D4</span>Slow trust</a></li>
+    <li><a href="#E1"><span class="num">E1</span>Placebo decomposition</a></li>
+    <li><a href="#E2"><span class="num">E2</span>Identity at zero</a></li>
+    <li><a href="#paper"><span class="num">3</span>What goes in the paper</a></li>
+    <li><a href="#experiments"><span class="num">4</span>Cheapest checks first</a></li>
+    <li><a href="#literature"><span class="num">5</span>Literature to verify</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="thesis">
+  <h3><span class="sect">0</span>The gap that organises everything</h3>
+  <p class="lead">Every theorem below serves one decomposition. URB reports how far a learned fleet sits from the best achievable cost; that distance splits into two terms with different owners.</p>
+  <div class="dm">\[
+  \underbrace{C(s_{\text{learned}}) - C(s^{\mathrm{SO}})}_{\text{what URB measures}}
+  \;=\;
+  \underbrace{C(s_{\text{learned}}) - C(s^{\mathrm{NE}})}_{\text{learning gap}}
+  \;+\;
+  \underbrace{C(s^{\mathrm{NE}}) - C(s^{\mathrm{SO}})}_{\text{equilibrium gap}}
+  \]</div>
+  <p>Here \(C\) is total CAV travel time with the human population fixed, \(s^{\mathrm{SO}}\) the social optimum and \(s^{\mathrm{NE}}\) the equilibrium that best-response dynamics reach from the learned profile. Three consequences carry the paper:</p>
+  <ul>
+    <li><strong>Under selfish rewards, no selfishly-optimising learner closes the equilibrium gap</strong> (B4). PACT‑1's defensible claim is shrinking the <em>learning</em> gap — reaching and tracking equilibrium where blind learners do not — especially under drift.</li>
+    <li><strong>At σ = 0 the equilibrium gap on this city is small</strong> (A7). That is the theoretical reason AON and greedy (3.01) beat every MARL method: a load-oblivious shortest path is near-optimal in light traffic.</li>
+    <li><strong>The severity dial divides capacity</strong>, pushing the instance out of light traffic so that both gaps become non-trivial (A4, A7). This is the formal justification for injecting non-stationarity at all.</li>
+  </ul>
+
+  <div class="verify">
+    <span class="lbl">Corrections to the earlier outline</span>
+    <ol class="corr">
+      <li><strong>Frozen humans are fixed background load, not Stackelberg followers.</strong> With <code>should_humans_adapt: false</code> (config1) humans never respond, so the CAV game is a congestion game with constant offsets. Stackelberg routing applies only when humans adapt after mutation.</li>
+      <li><strong>The 4/3 bound is the wrong anchor.</strong> Roughgarden–Tardos is nonatomic and additive. URB has 222 discrete vehicles, where the affine bound is 5/2 for pure equilibria (A2); and the severity layer's harm takes a <em>maximum</em> over links, which is a bottleneck game — a different class (A6).</li>
+      <li><strong>An uninformative estimator gets zero reward-gradient on trust, not a negative one.</strong> Trust decays only through the entropy bonus (D3). And with bias 2.2 and EMA 0.9 the trust gradient is 27.8× smaller than an unbiased sigmoid's (D4), so "learned" trust may be indistinguishable from fixed.</li>
+    </ol>
+  </div>
+</section>
+
+<hr class="div">
+
+<section id="model">
+  <h3><span class="sect">1</span>Formal model</h3>
+  <p>The codebase contains <strong>two distinct cost layers</strong>, and a theorem must say which one it is about. Conflating them is the fastest way to state something false.</p>
+
+  <h4>Primitives</h4>
+  <p>Agents \(N\), \(|N| = n\); controllable \(M \subseteq N\), fixed \(H = N \setminus M\). Each agent chooses one of \(K\) options (routes) \(s_i \in \mathcal{K}_i\). Elements (links) \(e \in E\) with capacity \(c_e \gt 0\). Co-presence \(O \in \{0,1\}^{n\times n}\) is symmetric (interval overlap) with \(O_{ii} = 1\); write \(O' = O - I\). A profile is \(s = (s_1,\dots,s_n)\), with \(s_H\) held fixed throughout.</p>
+
+  <h4>Layer N — native coupling, additive (what PACT‑1 models)</h4>
+  <div class="dm">\[
+  \tau_i(s) \;=\; \sum_{e \in s_i} \Big( b_e + a_e \sum_{j \ne i} O_{ij}\, \mathbf{1}[e \in s_j] \Big),
+  \qquad a_e, b_e \ge 0
+  \]</div>
+  <p>\(b_e\) is free-flow time on \(e\); \(a_e\) the delay one co-present vehicle adds. PACT‑1's basis \(G_m[c,c'] = \sum_{e \in c \cap c' \cap m} w_e / L_c\) with \(w_e = \text{length}_e/\text{lanes}_e\) maps onto this with \(a_e = \beta^*_{m(e)} w_e / \bar v\) and \(b_e = (1+\beta^*_0)\,\mathrm{fft}_e\), <em>under the constant-speed approximation</em> \(\mathrm{fft}_c / L_c \approx 1/\bar v\).</p>
+
+  <h4>Layer H — injected harm, bottleneck (what the severity dial does)</h4>
+  <div class="dm">\[
+  u_i(s;g) = \max_{e \in s_i} \frac{\sum_{j\ne i} O_{ij}\mathbf{1}[e\in s_j]}{T_i\, c_e\, g_e},
+  \qquad
+  m_i(s;g) = \frac{1 + \alpha\, u_i(s;g)}{1 + \alpha\, u_i(s;1)},
+  \qquad
+  t_i = m_i(s;g)\, t_i^{\mathrm{sim}}(s)
+  \]</div>
+  <p>with \(\alpha = 2.28\), \(\beta = 1\), and \(g_e(t,\sigma) = \operatorname{clip}\!\big(1 - \sigma L A(t) s_e,\,[10^{-3},1]\big)\), \(L = 0.14\).</p>
+
+  <h4>The steered policy and the estimator</h4>
+  <div class="dm">\[
+  \tilde\pi(k \mid x) = \operatorname{softmax}\!\big(\ell(x) - g\,\kappa\, z\big)_k,
+  \quad
+  z_k = \frac{\hat t_k - \bar{\hat t}}{\operatorname{sd}(\hat t)},
+  \quad
+  \hat t_k = \mathrm{fft}_k\big(1 + \hat\beta^\top \psi_k\big)
+  \]</div>
+  <div class="dm">\[
+  g = \mathrm{conf}\cdot\big(\eta\, g_{\text{prev}} + (1-\eta)\, g_{\max}\,\sigma(w + b)\big),
+  \qquad \eta = 0.9,\; b = 2.2,\; g_{\max} = \kappa = 1
+  \]</div>
+  <p>\(\hat\beta\) is per-agent RLS with forgetting \(\mu = 0.999\) and prior \(p_0 = 10\); the confidence gate averages prediction confidence over the agent's \(K\) candidate regressors. Social cost is \(C(s) = \sum_{i \in M} \tau_i(s)\) (Layer N) or \(C_H(s) = \sum_{i\in M} t_i(s)\) (with harm).</p>
+
+  <div class="note">
+    <p><b>Two declared operators, not one.</b> <code>urb_ns/network.py</code> builds \(W\) from incidence over capacity (lanes × 600 veh/h), averaged over agent \(i\)'s links. <code>pact1/basis.py</code> builds \(G_m\) from shared per-lane <em>length</em> by road class, normalised by \(i\)'s own route length. Both scale as \(1/\text{lanes}\); \(G_m\) adds length. Part A is stated in Layer N's coefficients \(a_e\) so it can be mapped onto either — but the mapping must be written down.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section id="map">
+  <h3><span class="sect">2</span>Theorem map</h3>
+  <p>All 25 statements at a glance. Status is encoded in the chip colour: pine means established, burnt means still owed.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>ID</th><th>Result</th><th>Status</th><th>Checked by</th><th>Paper</th></tr></thead>
+      <tbody>
+        <tr><td class="id">A1</td><td>CAV routing is an exact potential game on the co-presence graph</td><td><i class="chip proved">proved</i></td><td>structural</td><td>main</td></tr>
+        <tr><td class="id">A2</td><td>(5/3, 1/3)-smooth when all co-present ⇒ PoA ≤ 5/2, including no-regret outcomes; general \(O\) open</td><td><i class="chip classical">classical</i> <i class="chip strategy">strategy</i></td><td>declared-model PoA</td><td>main</td></tr>
+        <tr><td class="id">A3</td><td>5/2 is tight for the class</td><td><i class="chip proved">proved</i></td><td>given A2</td><td>appendix</td></tr>
+        <tr><td class="id">A4</td><td>Uniform derating leaves ceiling shares invariant; excess scales as \(1/g - 1\)</td><td><i class="chip proved">proved</i> <i class="chip checked">checked</i></td><td>NS certificate</td><td>main</td></tr>
+        <tr><td class="id">A5</td><td>Exchangeable scaling law; URB's controllable set is spatially clustered</td><td><i class="chip proved">proved</i> <i class="chip checked">checked</i></td><td>randomised ceiling</td><td>appendix</td></tr>
+        <tr><td class="id">A6</td><td>PoA transfers through the harm layer, valid while \(g_{\min} \gt \mu\)</td><td><i class="chip proved">proved</i></td><td>given A2</td><td>appendix</td></tr>
+        <tr><td class="id">A7</td><td>Load-dependent Pigou bound: severity restores coordination value</td><td><i class="chip classical">classical</i> <i class="chip conjecture">conjecture</i></td><td>declared-model PoA(σ)</td><td>main</td></tr>
+        <tr><td class="id">A8</td><td>Learning gap vs equilibrium gap; max regret lower-bounds the potential gap</td><td><i class="chip proved">proved</i></td><td>ex-post regret at test</td><td>main</td></tr>
+        <tr><td class="id">B1</td><td>The steered fleet is a z-normalised logit QRE</td><td><i class="chip proved">proved</i></td><td>steered fixed-point sweep</td><td>main</td></tr>
+        <tr><td class="id">B2</td><td>The estimator is performatively stable iff trust is below \(g_{\text{stab}}\)</td><td><i class="chip strategy">strategy</i></td><td>pred_gain vs trust</td><td>main</td></tr>
+        <tr><td class="id">B3</td><td>Two options: sign steering, exact \(g^*\), flapping above \(g_{\mathrm{UE}}\)</td><td><i class="chip proved">proved</i> <i class="chip conjecture">conjecture</i></td><td>fixed-trust sweep</td><td>main</td></tr>
+        <tr><td class="id">B4</td><td>Selfish trust reproduces selfish routing</td><td><i class="chip proved">proved</i></td><td>non-selfish reward arm</td><td>main</td></tr>
+        <tr><td class="id">C1</td><td>Tracking floor \(\propto \sqrt{\sigma_e \sigma_w}\)</td><td><i class="chip classical">classical</i></td><td>μ sweep</td><td>appendix</td></tr>
+        <tr><td class="id">C2</td><td>Trace confidence decays as \(\mu^{t}\) without excitation</td><td><i class="chip proved">proved</i> <i class="chip checked">checked</i></td><td>debug CSV</td><td>appendix</td></tr>
+        <tr><td class="id">C3</td><td>Averaged prediction confidence floors at \(1/K\)</td><td><i class="chip proved">proved</i> <i class="chip checked">checked</i></td><td>debug CSV</td><td>appendix</td></tr>
+        <tr><td class="id">C4</td><td>Excitation ≤ \(D^2\) × (own + co-present peers' policy entropy)</td><td><i class="chip proved">proved</i></td><td>x_std vs entropy</td><td>main</td></tr>
+        <tr><td class="id">C5</td><td>Uncentred condition number \(\approx (1+s^2+m^2)^2/s^2\)</td><td><i class="chip proved">proved</i> <i class="chip checked">checked</i></td><td>logged x_std</td><td>appendix</td></tr>
+        <tr><td class="id">C6</td><td>Directions outside the policy's support are unidentifiable</td><td><i class="chip proved">proved</i></td><td>—</td><td>appendix</td></tr>
+        <tr><td class="id">C★</td><td>Excitation decay drives \(g_{\text{stab}} \to 0\)</td><td><i class="chip strategy">strategy</i></td><td>pred_gain decay</td><td>main</td></tr>
+        <tr><td class="id">D1</td><td>PACT‑1's policy class nests the host's</td><td><i class="chip proved">proved</i></td><td>gated</td><td>appendix</td></tr>
+        <tr><td class="id">D2</td><td>KL ≤ \(g^2\kappa^2K/4\); single-step return deviation ≤ \(R\,g\kappa\sqrt{K/8}\)</td><td><i class="chip proved">proved</i> <i class="chip checked">checked</i></td><td>sampled bound</td><td>main</td></tr>
+        <tr><td class="id">D3</td><td>The trust gradient is a covariance test</td><td><i class="chip proved">proved</i></td><td>corrupted-estimate arm</td><td>main</td></tr>
+        <tr><td class="id">D4</td><td>Bias 2.2 and EMA 0.9 make trust 27.8× slower to learn</td><td><i class="chip checked">checked</i></td><td>learned vs fixed arm</td><td>appendix</td></tr>
+        <tr><td class="id">E1</td><td>Placebo days identify the effect of training under the dial</td><td><i class="chip proved">proved</i> <i class="chip strategy">strategy</i></td><td>test-phase split</td><td>main</td></tr>
+        <tr><td class="id">E2</td><td>The σ = 0 wrapper is the stock task</td><td><i class="chip proved">proved</i></td><td>gated</td><td>appendix</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="part">
+  <span class="part-tag">Part A</span>
+  <h2>Equilibrium structure — making the ceiling a theorem</h2>
+  <p class="lead">The committed decomposition is an accounting identity over load. Part A turns it into statements about what equilibria and learners can achieve.</p>
+</div>
+
+<section class="thm" id="A1">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">A1</span>
+    <span class="thm-title">Exact potential on the co-presence graph</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>Under Layer N with symmetric \(O\), \(a_e, b_e \ge 0\) and \(s_H\) fixed, the CAV routing game admits the exact potential</p>
+    <div class="dm">\[
+    \Phi(s) = \sum_{e \in E}\Big( b_e\, n_e(s) + a_e \sum_{i \lt j} O_{ij}\,\mathbf{1}[e\in s_i]\,\mathbf{1}[e \in s_j] \Big).
+    \]</div>
+    <p>Hence pure Nash equilibria exist, every better-response sequence is finite, and independent best-responding CAVs converge.</p>
+  </div>
+  <p class="reading">In words: the native URB coupling is a graphical congestion game. Equilibria exist and simple dynamics find them — so when MARL fails on URB, it is not because there is nothing to converge to.</p>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> Let CAV \(i\) deviate from \(s_i\) to \(s_i'\). Terms of \(\Phi\) not involving \(i\) are unchanged, and human counts are constant. Using \(O_{ij} = O_{ji}\),</p>
+    <div class="dm">\[
+    \Phi(s_i', s_{-i}) - \Phi(s) = \sum_{e\in s_i'}\Big(b_e + a_e\sum_{j\ne i} O_{ij}\mathbf{1}[e\in s_j]\Big) - \sum_{e\in s_i}\Big(b_e + a_e\sum_{j\ne i}O_{ij}\mathbf{1}[e\in s_j]\Big) = \tau_i(s_i',s_{-i}) - \tau_i(s).
+    \]</div>
+    <p>So \(\Phi\) is an exact potential (Rosenthal; Monderer–Shapley). Its minimiser over the finite profile space is a pure equilibrium, and each strict improvement lowers \(\Phi\), so improvement paths are finite. <span class="qed">∎</span></p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Scope</span>
+    <p>This holds in <strong>travel-time units</strong>, which is what selfish agents are paid in. In the regression target's relative-excess units every cost is divided by the agent's own \(\mathrm{fft}_{s_i}\), a choice-dependent factor, and the potential property is lost. The link to PACT‑1's basis also rests on the constant-speed approximation.</p>
+  </div>
+  <p class="obl"><span class="lbl">Obligates</span>Nothing extra; it is the foundation for A2, A3, A6 and A8.</p>
+</section>
+
+<section class="thm" id="A2">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">A2</span>
+    <span class="thm-title">Smoothness, and why it reaches learners</span>
+    <span class="thm-chips"><i class="chip classical">classical (i)</i><i class="chip strategy">strategy (ii)</i></span>
+  </div>
+  <div class="statement">
+    <p>A cost-minimisation game is \((\lambda,\mu)\)-smooth if for all profiles \(s, s^*\)</p>
+    <div class="dm">\[ \sum_{i} \tau_i(s_i^*, s_{-i}) \;\le\; \lambda\, C(s^*) + \mu\, C(s), \qquad \mu \lt 1, \]</div>
+    <p>which bounds the price of anarchy by \(\lambda/(1-\mu)\) for pure, mixed, correlated and coarse correlated equilibria — and therefore for the time-averaged outcome of any no-regret dynamics.</p>
+    <p><strong>(i)</strong> If every pair is co-present (\(O \equiv \mathbf{1}\)) and \(b_e \ge a_e\), Layer N is an atomic affine congestion game with latency \((b_e - a_e) + a_e k\); it is \((5/3, 1/3)\)-smooth, so PoA ≤ 5/2.</p>
+    <p><strong>(ii)</strong> For general symmetric \(O\): find \((\lambda,\mu)\), which will necessarily depend on \(\max_e a_e/b_e\).</p>
+  </div>
+  <p class="reading">In words: the ceiling becomes a bound that applies to whatever no-regret learners converge to on average — which is what connects equilibrium theory to MARL, not just to idealised equilibria.</p>
+  <div class="proof">
+    <p><span class="lbl">Strategy for (ii).</span> Per element, with \(y = \mathbf{1}[e\in s^*]\) and \(z = \mathbf{1}[e\in s]\), the requirement is</p>
+    <div class="dm">\[ b_e|y| + a_e\, y^\top O' z \;\le\; \lambda\big(b_e|y| + a_e\, y^\top O' y\big) + \mu\big(b_e|z| + a_e\, z^\top O' z\big). \]</div>
+    <p>Two difficulties. First, \(O'\) has zero diagonal and zero trace, so it is indefinite and the Cauchy–Schwarz route is closed. Second, self-exclusion forces a load-dependent constant: a single player on \(e\) under \(s^*\), facing one co-present player under \(s\), gives \(b_e + a_e \le (\lambda+\mu)b_e\), i.e. \(a_e \le (\lambda+\mu-1)\,b_e\). The template is the Christodoulou–Koutsoupias integer inequality \(y(z+1) \le \tfrac53 y^2 + \tfrac13 z^2\); graphical congestion games are the nearest known class.</p>
+  </div>
+  <p class="obl"><span class="lbl">Obligates</span>Declared-model PoA on saint_arnoult — equilibrium by best response (A1 guarantees convergence), optimum by local search.</p>
+</section>
+
+<section class="thm" id="A3">
+  <div class="thm-head">
+    <span class="thm-kind">Corollary</span><span class="thm-id">A3</span>
+    <span class="thm-title">The bound is tight for the class</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>No PoA bound below 5/2 holds for Layer N with \(b_e \ge a_e\).</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> The class contains \(O \equiv \mathbf{1}\) with \(b_e = a_e\), which is exactly the pure-linear latency \(a_e k\). The classical lower-bound instances for atomic linear congestion games live there and attain 5/2. <span class="qed">∎</span></p>
+  </div>
+  <p class="reading">Pair with A2 in the paper: "the gap is tight" is a much stronger claim than either direction alone.</p>
+</section>
+
+<section class="thm" id="A4">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">A4</span>
+    <span class="thm-title">Severity scales the stakes, not the structure</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i><i class="chip checked">checked</i></span>
+  </div>
+  <div class="statement">
+    <p>For uniform derating \(g_e \equiv g\) and any contributor subset \(S\),</p>
+    <div class="dm">\[ u_i^S(s;g) = \frac{u_i^S(s;1)}{g}, \qquad \Delta_i^S = u_i^S(s;1)\Big(\frac1g - 1\Big). \]</div>
+    <p>Every ceiling share \(\Delta^S/\Delta^{S'}\) is therefore independent of σ, and total excess scales as \(\mathbb{E}[1/g - 1]\). With heterogeneous sensitivity \(s_e\), shares move only when the binding element switches.</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> A constant \(g\) scales every candidate element's ratio equally, so the argmax in \(u_i\) is unchanged and \(1/g\) factors out of the maximum. The same holds for each subset's loading and for the own-vehicle term. <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Checked against the certificate</span>
+    <p class="mono">mean over wet days of (1/g − 1):  σ=1 0.07993 · σ=2 0.18215 · σ=3 0.31945</p>
+    <p class="mono">excess ratio σ2/σ1:  predicted 2.279 · certificate 2.330</p>
+    <p class="mono">peer share σ=1 → σ=2:  40.82% → 40.72%, moved 0.10 pp</p>
+    <p>The uniform law explains nearly all of the severity scaling; the extra 2% comes from high-sensitivity links, where \(1/(1-x)\) is more convex. On saint_arnoult binding links rarely switch.</p>
+  </div>
+  <p class="reading">For the paper this cuts both ways. It is a clean, confirmed prediction — and it says the dial does <em>not</em> reshape who causes the damage on this city. Any claim that severity changes the coordination structure needs heterogeneous sensitivity to bite.</p>
+</section>
+
+<section class="thm" id="A5">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">A5</span>
+    <span class="thm-title">Exchangeable scaling law for the coordination gap</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i><i class="chip checked">checked</i></span>
+  </div>
+  <div class="statement">
+    <p>If the controllable set is a uniformly random subset of size \(m\) and every peer contributes mean coupling \(q\) in own-vehicle units, then</p>
+    <div class="dm">\[
+    (\text{fixed},\ \text{own},\ \text{peer}) \;=\; \frac{\big((n-m)\,q,\ \ 1,\ \ (m-1)\,q\big)}{(n-1)\,q + 1}.
+    \]</div>
+    <p>The coordination gap is affine in \(m\), and irreducible share vanishes at \(m = n\).</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> A controllable agent has \(m-1\) controllable peers and \(n-m\) fixed ones. Under exchangeability each contributes \(q\) in expectation, its own vehicle contributes 1, and excess is proportional to load. Normalise. <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Checked — and the miss is the finding</span>
+    <p class="mono">calibrate q from own share at m = n (18.85%):  q = 0.01948</p>
+    <p class="mono">predicted at 89/222:  fixed 48.8 · own 18.9 · peer 32.3</p>
+    <p class="mono">certificate σ=1:      fixed 42.6 · own 16.5 · peer 40.8</p>
+    <p class="mono">implied per-pair coupling:  CAV–CAV 0.02805 · CAV–human 0.01939 · ratio 1.447</p>
+    <p class="mono">declared W ratio 1.164 · co-presence ratio 1.027 · start times 978±533 s vs 939±545 s</p>
+    <p>The human coupling matches the calibrated \(q\) almost exactly (0.01939 vs 0.01948), so the entire miss is controllable agents loading <em>each other</em> 45% more than exchangeability predicts. Timing does not explain it (1.03); shared routes explain part (1.16). The rest is not accounted for by the mean-over-links operator — the binding-link maximum and the renormalisation step are the remaining candidates.</p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Consequence for experiments</span>
+    <p>URB makes the <em>first</em> 40% of agents by id controllable, and that prefix is spatially clustered. An N-scaling experiment run that way conflates <em>how many</em> agents are controllable with <em>which</em> ones. Randomise the controllable set, or report the selection rule and its coupling ratio.</p>
+    <p>Also state in the paper that the decomposition is an exact partition only when the binding element is the same for every contributor subset; otherwise the code renormalises (<code>scale = tot / s</code>) and the shares are a proportional attribution.</p>
+  </div>
+</section>
+
+<section class="thm" id="A6">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">A6</span>
+    <span class="thm-title">Transferring the bound through the harm layer</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>Suppose simulator time equals Layer N cost and Layer N is \((\lambda,\mu)\)-smooth. Since \(1 \le m_i \le 1/g_{\min}\),</p>
+    <div class="dm">\[
+    \tau_i(s) \le t_i(s) \le \tau_i(s)/g_{\min}
+    \quad\Longrightarrow\quad
+    \mathrm{PoA}_H \;\le\; \frac{\lambda}{g_{\min}\,(g_{\min} - \mu)}
+    \qquad \text{whenever } g_{\min} \gt \mu .
+    \]</div>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> For \(g \le 1\) and \(x \ge 0\), \((1 + x/g)/(1+x) \le 1/g\), which gives the sandwich. An equilibrium \(s\) of the harmed game satisfies \(\tau_i(s) \le t_i(s) \le t_i(s_i^*, s_{-i}) \le \tau_i(s_i^*, s_{-i})/g\), so it is a \(\gamma\)-approximate equilibrium of Layer N with \(\gamma = 1/g_{\min}\). Summing and applying smoothness, \(C(s)(1-\gamma\mu) \le \gamma\lambda\, C(s^*)\). Finally \(C_H(s) \le C(s)/g_{\min}\) and \(C_H(\mathrm{OPT}_H) \ge C(\mathrm{OPT}_N)\). <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Values with (λ, μ) = (5/3, 1/3)</span>
+    <p class="mono">g_min = 1.00 → 2.50 · 0.86 (σ=1 peak) → 3.68 · 0.58 (σ=3 peak, uniform) → 11.65</p>
+    <p class="mono">g_min = 0.16 (σ=3, sensitivity 2.0) → bound does not apply (g_min ≤ 1/3)</p>
+  </div>
+  <p class="reading">Honest reading: the transfer is valid but loose, and it breaks exactly in the regime the σ = 3 runs occupy on high-sensitivity links. The combined game is neither purely additive nor purely bottleneck. Bottleneck congestion games admit pure strong equilibria (Harks, Hoefer, Klimm, Skopalik) but can have unbounded PoA in general routing (Banner–Orda); whether this instance class is bounded is open.</p>
+</section>
+
+<section class="thm" id="A7">
+  <div class="thm-head">
+    <span class="thm-kind">Conjecture</span><span class="thm-id">A7</span>
+    <span class="thm-title">Light traffic, and why severity restores coordination value</span>
+    <span class="thm-chips"><i class="chip classical">classical framework</i><i class="chip conjecture">conjecture for URB</i></span>
+  </div>
+  <div class="statement">
+    <p>For affine latencies \(b_e + a_e x\) with congestible ratio \(\rho = \max_e a_e d_e / b_e\), the Pigou-bound specialisation of the anarchy value gives, in the nonatomic approximation,</p>
+    <div class="dm">\[ \mathrm{PoA} \;\le\; \frac{1+\rho}{1 + \tfrac34\rho}, \qquad \rho \to \frac{\rho}{g} \text{ under derating}. \]</div>
+    <p>Conjecture: the atomic URB instance satisfies a bound of the same form, so its equilibrium gap is small at σ = 0 and grows with σ.</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Derivation.</span> On a Pigou network, route demand \(r\) either all on \(\ell(x) = b + ax\) or split against a constant link at \(\ell(r)\). The optimal split puts \(r/2\) on \(\ell\), costing \(rb + \tfrac34 a r^2\); equilibrium costs \(r(b + ar)\). The ratio is \((1+\rho)/(1+\tfrac34\rho)\) with \(\rho = ar/b\), increasing in \(\rho\), with limit 4/3. Derating multiplies the congestible term by \(1/g\) and leaves free-flow time alone. <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Illustration at the calibrated mean load α·u ≈ 0.50</span>
+    <p class="mono">σ=0: ρ 0.50 → ≤ 1.091 · σ=1 peak: 0.58 → ≤ 1.101 · σ=3 peak: 0.86 → ≤ 1.131</p>
+    <p class="mono">σ=3, sensitivity 2.0: 3.13 → ≤ 1.234 · limit → 1.333</p>
+    <p>These use the <em>mean</em>; the bound needs the <em>maximum</em> over elements, which will be larger. Treat the column as a shape, not a result.</p>
+  </div>
+  <p class="reading">This is the most decision-relevant statement in the document. It explains why load-oblivious shortest paths win on URB today, and it predicts that the dial is what gives coordination something to do. If the computed curve stays flat near 1 at σ = 3, the injected non-stationarity does not create coordination value on this city — and that is worth knowing before spending the sweep budget.</p>
+  <p class="obl"><span class="lbl">Obligates</span>Compute \(\rho_{\max}\) and the declared-model PoA at σ ∈ {0, 1, 2, 3}. Minutes, no SUMO.</p>
+</section>
+
+<section class="thm" id="A8">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">A8</span>
+    <span class="thm-title">Separating the learning gap from the equilibrium gap</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>Define ex-post regret \(r_i(s) = \tau_i(s) - \min_{k}\tau_i(k, s_{-i}) \ge 0\). Then \(r_i(s) = 0\) for all \(i\) iff \(s\) is an equilibrium, and for the best-response limit \(s^{\mathrm{BR}}\) reached from \(s\),</p>
+    <div class="dm">\[ \Phi(s) - \Phi(s^{\mathrm{BR}}) \;\ge\; \max_{i \in M} r_i(s). \]</div>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> Let \(i^\star\) attain the maximum regret. Its best response lowers \(\Phi\) by exactly \(r_{i^\star}(s)\) (A1), and every later improving step lowers \(\Phi\) further. <span class="qed">∎</span></p>
+  </div>
+  <p class="reading">This is the instrument that makes the paper's claim measurable. Regret is computable at test time from the declared model and \(\hat\beta\), with no re-simulation — trustworthy to the extent <code>fit_gain</code> is high (not raw <code>fit_r2</code>, which the per-agent intercept inflates). Low regret with high cost means the method reached a bad equilibrium; high regret means it never reached one. Under selfish rewards PACT‑1 can only move the first term.</p>
+  <p class="obl"><span class="lbl">Obligates</span>Report mean and max ex-post regret per arm on the 100 test days.</p>
+</section>
+
+<hr class="div">
+
+<div class="part">
+  <span class="part-tag">Part B</span>
+  <h2>Performativity and trust — the informational Braess result</h2>
+  <p class="lead">The estimator's predictions move the fleet, which moves the load, which is what the estimator predicts. Part B is where the paper's most novel theory lives.</p>
+</div>
+
+<section class="thm" id="B1">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">B1</span>
+    <span class="thm-title">The steered fleet is a z-normalised logit QRE</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>Assume uninformative host logits, a nonatomic fleet, and exact predictions at the induced profile. Then any stationary choice distribution satisfies</p>
+    <div class="dm">\[ p = \operatorname{softmax}\!\big(-g\kappa\, z(c(p))\big), \qquad z(c) = \frac{c - \bar c}{\operatorname{sd}(c)}, \]</div>
+    <p>a logit quantal response equilibrium with effective rationality \(g\kappa/\operatorname{sd}(c(p))\). A fixed point exists whenever \(\operatorname{sd}(c(p)) \ge s_{\min} \gt 0\) on the simplex. At \(g = 0\) the split is uniform; as \(g\) grows it approaches the equilibrium support.</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> On the region where the spread of costs is bounded below, the map is a composition of continuous functions from the simplex to itself; Brouwer gives a fixed point. <span class="qed">∎</span></p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Where existence fails</span>
+    <p>When all predicted costs are equal the implementation defines the shift as zero rather than NaN (the floor property requires it). That makes the map discontinuous exactly at ties, and B3 shows this is where fixed points genuinely disappear. The z-normalisation that makes κ dimensionless is also what breaks global Lipschitz continuity — which matters again in B2.</p>
+  </div>
+</section>
+
+<section class="thm" id="B2">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">B2</span>
+    <span class="thm-title">Performative stability of the estimator</span>
+    <span class="thm-chips"><i class="chip strategy">proof strategy</i></span>
+  </div>
+  <div class="statement">
+    <p>Let \(\theta = \hat\beta\), let \(\mathcal{D}(\theta)\) be the distribution of \((\psi, y)\) produced by steering with \(\theta\), and let the loss be \((y - \psi^\top\theta)^2\). Assume</p>
+    <ul>
+      <li>strong convexity: \(2\lambda_{\min}\big(\mathbb{E}_{\mathcal{D}(\theta)}\psi\psi^\top\big) \ge \gamma \gt 0\) on the region of interest;</li>
+      <li>joint smoothness \(\beta_J\) on bounded support (the sensor clip and finite peer counts provide it);</li>
+      <li>ε-sensitivity: \(W_1(\mathcal{D}(\theta), \mathcal{D}(\theta')) \le \varepsilon\,\lVert\theta - \theta'\rVert\).</li>
+    </ul>
+    <p>Then repeated risk minimisation converges linearly to a unique performatively stable \(\theta_{\mathrm{PS}}\) if \(\varepsilon \lt \gamma/\beta_J\). <strong>To prove:</strong> the sensitivity is linear in trust,</p>
+    <div class="dm">\[ \varepsilon \;\le\; g\,\kappa\, L_z\, L_{\mathrm{sm}}\, L_W \quad\Longrightarrow\quad g_{\mathrm{stab}} = \frac{\gamma}{\beta_J\,\kappa\, L_z\, L_{\mathrm{sm}}\, L_W}. \]</div>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Strategy.</span> Chain four Lipschitz maps: \(\theta \mapsto z(\hat t(\theta))\) with constant \(L_z\), finite only where \(\operatorname{sd}(\hat t) \ge s_{\min}\); the logit shift to the choice distribution, \(L_{\mathrm{sm}}\); one agent's changed choice to its peers' regressors through the declared operator, \(L_W\) (bounded by the largest row of \(G_m\) times co-presence degree); and choices to the joint law of \((\psi, y)\). The base result is Perdomo, Zrnic, Mendler-Dünner and Hardt (2020). RLS with μ = 0.999 approximates repeated minimisation over a window of \(1/(1-\mu) = 1000\) days; the stochastic variant (Mendler-Dünner et al. 2020) and the multi-learner version — each CAV has its own \(\theta_i\), a decision-dependent game (Narang et al.) — should carry the same threshold with a spectral condition. Verify both before citing.</p>
+  </div>
+  <p class="reading">In words: past a critical trust, the estimator is chasing data its own steering keeps changing. The observable signature is <code>pred_gain</code> falling while <code>fit_gain</code> holds — the physics is right but the forecast no longer converges.</p>
+  <p class="obl"><span class="lbl">Obligates</span>Plot <code>pred_gain − fit_gain</code> against applied trust across the fixed-trust sweep.</p>
+</section>
+
+<section class="thm" id="B3">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">B3</span>
+    <span class="thm-title">Two options: sign steering, an exact optimum, and flapping</span>
+    <span class="thm-chips"><i class="chip proved">proved (i–iv)</i><i class="chip conjecture">conjecture (v)</i></span>
+  </div>
+  <div class="statement">
+    <p>Take \(K = 2\), a nonatomic unit mass of CAVs, \(c_1(p) = t_1 + ap\), \(c_2(p) = t_2 + a(1-p)\) with \(\Delta = t_2 - t_1 \in (0, 2a)\), uninformative host logits and exact predictions.</p>
+    <p><strong>(i)</strong> For any \(c_1 \ne c_2\), \(z = \pm 1\): z-score steering is <em>sign</em> steering, and the steered split toward the cheaper option is \(p = \sigma(2g\kappa)\), whatever the size of the cost difference.</p>
+    <p><strong>(ii)</strong> \(p^{\mathrm{SO}} = \tfrac12 + \tfrac{\Delta}{4a}\) and \(p^{\mathrm{UE}} = \tfrac12 + \tfrac{\Delta}{2a}\), so \(\tfrac12 \lt p^{\mathrm{SO}} \lt p^{\mathrm{UE}}\).</p>
+    <p><strong>(iii)</strong> A stationary split exists iff \(\sigma(2g\kappa) \le p^{\mathrm{UE}}\). On that range social cost falls on \([0, g^*]\) and rises on \([g^*, g_{\mathrm{UE}}]\), with</p>
+    <div class="dm">\[ g^* = \frac{\operatorname{logit}(p^{\mathrm{SO}})}{2\kappa} \quad\text{attaining the social optimum exactly.} \]</div>
+    <p><strong>(iv)</strong> If \(\sigma(2g\kappa) \gt p^{\mathrm{UE}}\), no stationary split exists; with one-step-lagged predictions the fleet alternates between \(\sigma(2g\kappa)\) and \(1 - \sigma(2g\kappa)\).</p>
+    <p><strong>(v)</strong> With exponentially-smoothed predictions (weight ρ), the fleet chatters around \(p^{\mathrm{UE}}\) and its time-average converges to the selfish equilibrium.</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> (i) Two values have population standard deviation \(|c_1 - c_2|/2\), so each z-score is \(\pm1\); the logit gap is \(2g\kappa\). (ii) First-order condition of \(S(p) = pt_1 + (1-p)t_2 + a(p^2 + (1-p)^2)\), and \(c_1 = c_2\). (iii) \(S\) is a convex quadratic minimised at \(p^{\mathrm{SO}}\), and \(g \mapsto \sigma(2g\kappa)\) is increasing; stationarity requires the sign to stay consistent, \(c_1(p) \le c_2(p) \iff p \le p^{\mathrm{UE}}\). (iv) The only other candidate, \(1 - \sigma(2g\kappa) \lt \tfrac12 \lt p^{\mathrm{UE}}\), contradicts its own sign requirement; at an exact tie the shift is zero, giving \(p = \tfrac12 \ne p^{\mathrm{UE}}\). <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">With the shipped constants</span>
+    <p class="mono">g_max = κ = 1 → largest two-option steered split σ(2) = 0.881</p>
+  </div>
+  <p class="reading">This is the headline theory figure. Trust has a phase diagram: under-steering below \(g^*\), exact optimum at \(g^*\), over-steering toward the selfish equilibrium above it, and oscillation past \(g_{\mathrm{UE}}\). The oscillation is already instrumented as <code>route_switch_frac</code>. Note also that because z-scoring discards magnitude, steering strength does not grow with how much better a route is — a property the paper should state, not hide.</p>
+  <p class="obl"><span class="lbl">Obligates</span>(1) Iterate the steered fixed point on the declared model with K = 4 over \(g \in [0,1]\) — minutes, no SUMO. (2) Fixed-trust arm at \(g \in \{0.1, 0.3, 0.5, 0.7, 0.9, 1.0\}\), and look for a non-monotone return curve with a jump in <code>route_switch_frac</code>.</p>
+</section>
+
+<section class="thm" id="B4">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">B4</span>
+    <span class="thm-title">Selfish trust reproduces selfish routing</span>
+    <span class="thm-chips"><i class="chip proved">proved for K = 2</i></span>
+  </div>
+  <div class="statement">
+    <p>In the setting of B3, let each CAV choose its own trust \(g_i \in [0, g_{\max}]\) to minimise its own expected cost. Then:</p>
+    <p><strong>(i)</strong> whenever \(c_1(\bar p) \lt c_2(\bar p)\), every agent's best response is \(g_i = g_{\max}\);</p>
+    <p><strong>(ii)</strong> symmetric trust equilibria have \(\bar p = \min\big(\sigma(2g_{\max}\kappa),\ p^{\mathrm{UE}}\big)\), the second case through the chattering of B3(v);</p>
+    <p><strong>(iii)</strong> if \(\sigma(2g_{\max}\kappa) \ge p^{\mathrm{SO}}\), the trust equilibrium is inefficient, with \(S(\bar p)/S(p^{\mathrm{SO}}) \le S(p^{\mathrm{UE}})/S(p^{\mathrm{SO}}) \le 4/3\).</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> Agent \(i\)'s cost is \(p_i c_1(\bar p) + (1-p_i)c_2(\bar p)\) with \(p_i = \sigma(2g_i\kappa)\); a single nonatomic agent does not move \(\bar p\), so \(\partial J_i/\partial g_i = 2\kappa\,\sigma'(2g_i\kappa)\,(c_1 - c_2) \lt 0\). Then \(\bar p \in [p^{\mathrm{SO}}, p^{\mathrm{UE}}]\) where the convex \(S\) is increasing, and the last ratio is the nonatomic affine price of anarchy. <span class="qed">∎</span></p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Corollary B4.1 — what the paper may claim</span>
+    <p>Under selfish rewards the equilibrium gap is not closable by any selfishly-optimising learner, PACT‑1 included. A claim to close the coordination gap requires a social objective.</p>
+    <p>The severity layer currently refuses every behaviour except <code>selfish</code> (<code>_LINEAR_REWARD_BEHAVIOURS = {"selfish"}</code>), while URB ships social, collaborative and altruistic task configs. Extending the layer's reward mapping to one of those is a <strong>precondition</strong> for any coordination-gap claim.</p>
+  </div>
+  <p class="reading">This is sobering and it is also clarifying. It is the formal version of the compensation commons: trust is individually rational and collectively excessive, exactly as route choice is.</p>
+  <p class="obl"><span class="lbl">Obligates</span>One non-selfish reward arm, after the reward mapping is extended.</p>
+</section>
+
+<hr class="div">
+
+<div class="part">
+  <span class="part-tag">Part C</span>
+  <h2>Identification in a converging population</h2>
+  <p class="lead">The fleet needs variety to identify the coupling, and learning destroys that variety. Part C turns the measured pathologies into theorems.</p>
+</div>
+
+<section class="thm" id="C1">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">C1</span>
+    <span class="thm-title">The tracking floor</span>
+    <span class="thm-chips"><i class="chip classical">classical</i></span>
+  </div>
+  <div class="statement">
+    <p>For \(y_t = \psi_t^\top\theta_t + e_t\) with noise variance \(\sigma_e^2\), random-walk drift of variance \(\sigma_w^2\) and persistently exciting \(\psi_t\), exponentially-weighted RLS has steady-state tracking error</p>
+    <div class="dm">\[ \mathrm{MSE}(\mu) \approx c_1 (1-\mu)\,\sigma_e^2 + c_2\,\frac{\sigma_w^2}{1-\mu}, \qquad 1-\mu^* \propto \frac{\sigma_w}{\sigma_e}, \qquad \mathrm{RMS}^* \propto \sqrt{\sigma_e\,\sigma_w}. \]</div>
+  </div>
+  <p class="reading">Cite the adaptive-filtering tracking analysis (e.g. Guo and Ljung, 1995) and verify the exact form. Its role in the paper is to justify declaring μ and sweeping it: the floor cannot be tuned away, only balanced.</p>
+</section>
+
+<section class="thm" id="C2">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">C2</span>
+    <span class="thm-title">Trace confidence collapses without excitation</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i><i class="chip checked">checked, order of magnitude</i></span>
+  </div>
+  <div class="statement">
+    <p>If \(\psi_t \in S\) with \(\dim S \lt p\) for all \(t \ge t_0\), then for any unit \(v \perp S\)</p>
+    <div class="dm">\[ v^\top P_t^{-1} v = \mu^{\,t-t_0}\, v^\top P_{t_0}^{-1} v, \qquad \operatorname{tr} P_t \;\ge\; \frac{\mu^{-(t-t_0)}}{v^\top P_{t_0}^{-1} v} \to \infty, \]</div>
+    <p>so \(\mathrm{conf}_{\mathrm{tr}} = 1/(1 + \operatorname{tr}P_t/p_0) \to 0\) at rate \(\mu^{t}\), independent of prediction accuracy.</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> The information matrix obeys \(P_t^{-1} = \mu P_{t-1}^{-1} + \psi_t\psi_t^\top\), and \(v^\top\psi_t = 0\) removes the update in direction \(v\). For unit \(v\), \(v^\top P^{-1} v \ge \lambda_{\min}(P^{-1}) = 1/\lambda_{\max}(P)\), and \(\operatorname{tr}P \ge \lambda_{\max}(P)\). <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Against the recorded collapse</span>
+    <p class="mono">μ^(−4200) = e^4.20 ≈ 67 → confidence 0.20 falls to roughly 0.004</p>
+    <p class="mono">recorded on saint_arnoult: 0.20 → 0.005 over 4200 days while fit_r2 held at 0.9998</p>
+  </div>
+</section>
+
+<section class="thm" id="C3">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">C3</span>
+    <span class="thm-title">The averaged prediction gate floors at 1/K</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i><i class="chip checked">checked in simulation</i></span>
+  </div>
+  <div class="statement">
+    <p>Suppose from \(t_0\) the chosen regressor is constant, \(\psi_c\), and every other candidate \(\psi_k\) has a component orthogonal to it. Then</p>
+    <div class="dm">\[ \psi_c^\top P_t\,\psi_c \to 1-\mu, \qquad \psi_k^\top P_t\,\psi_k \to \infty, \qquad \frac1K\sum_{k} \mathrm{conf}_{\mathrm{pred}}(\psi_k) \;\to\; \frac1K\Big(1 + O(1-\mu)\Big). \]</div>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> The information matrix tends to \(\psi_c\psi_c^\top/(1-\mu) + \varepsilon_t I\) with \(\varepsilon_t \to 0\). Sherman–Morrison gives \(\psi_c^\top P\psi_c = \lVert\psi_c\rVert^2/(\varepsilon_t + \lVert\psi_c\rVert^2/(1-\mu)) \to 1-\mu\), so the chosen candidate's confidence tends to \(1/(1 + p(1-\mu)/(p_0\lVert\psi_c\rVert^2)) \approx 1\). Orthogonal components see variance \(\approx 1/\varepsilon_t \to \infty\), so the other candidates' confidence tends to 0. <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Simulated with the shipped constants (μ = 0.999, p₀ = 10, p = 4)</span>
+    <p class="mono">t = 100:   chosen 0.9970 · others 0.2388 · mean over K 0.4283 · trace 2.3e−1</p>
+    <p class="mono">t = 1000:  chosen 0.9995 · others 0.1137 · mean over K 0.3351 · trace 1.1e−1</p>
+    <p class="mono">t = 6000:  chosen 0.9997 · others 0.0009 · mean over K 0.2506 · trace 8.2e−4</p>
+  </div>
+  <p class="reading">Corollary: applied trust floors near \(g_{\mathrm{pol}}/K \approx 0.225\). The floor is epistemically correct — the other candidates' predictions really are unidentified (C6) — so PACT‑1 converges toward, but never onto, the blind arm. The testable prediction is that any PACT‑1 advantage concentrates where excitation exists: early training and the transitions into and out of the wet season.</p>
+</section>
+
+<section class="thm" id="C4">
+  <div class="thm-head">
+    <span class="thm-kind">Lemma</span><span class="thm-id">C4</span>
+    <span class="thm-title">Excitation is bounded by fleet indecision</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>Let \(\psi\) be agent \(i\)'s executed regressor, whose range has diameter \(D\). Then</p>
+    <div class="dm">\[ \operatorname{tr}\operatorname{Cov}(\psi) \;\le\; D^2\Big[\big(1 - \max_k \pi_i(k)\big) + \sum_{j\ne i} O_{ij}\big(1 - \max_k \pi_j(k)\big)\Big] \;\le\; D^2\Big[H(\pi_i) + \sum_{j \ne i} O_{ij}\, H(\pi_j)\Big]. \]</div>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> \(\operatorname{tr}\operatorname{Cov}(\psi) \le \mathbb{E}\lVert\psi - \psi^\circ\rVert^2\) for the regressor \(\psi^\circ\) at the modal joint profile. The regressor depends only on \(i\)'s route and its co-present peers' routes, so it differs from \(\psi^\circ\) only if one of them leaves its mode; a union bound gives the bracket, and \(\lVert\psi - \psi^\circ\rVert \le D\). Finally \(1 - x \le -\log x\), so \(1 - \max_k \pi(k) \le H(\pi)\). No independence is needed. <span class="qed">∎</span></p>
+  </div>
+  <p class="reading">In words: as a population's policies harden, the data it generates loses the variety needed to identify how it is coupled. Identification and convergence are in direct tension — Feldbaum's dual-control problem, now with a population instead of a single controller.</p>
+  <p class="obl"><span class="lbl">Obligates</span>Plot logged <code>x_std</code> against mean policy entropy over training.</p>
+</section>
+
+<section class="thm" id="C5">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">C5</span>
+    <span class="thm-title">Why centring rescued identifiability</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i><i class="chip checked">checked</i></span>
+  </div>
+  <div class="statement">
+    <p>For \(\psi = [1, x]\) with a scalar channel of mean \(m\) and standard deviation \(s\), \(\mathbb{E}[\psi\psi^\top]\) has trace \(T = 1 + s^2 + m^2\) and determinant \(s^2\), so</p>
+    <div class="dm">\[ \operatorname{cond} = \frac{\big(T + \sqrt{T^2 - 4s^2}\big)^2}{4s^2} \;\approx\; \frac{(1+s^2+m^2)^2}{s^2}, \]</div>
+    <p>quartic in the mean. Centring and scaling (\(m = 0\), \(s = 1\)) give exactly 1.</p>
+  </div>
+  <div class="check">
+    <span class="lbl">Against the recorded conditioning</span>
+    <p class="mono">m = 37:  s = 1 → 1.88e6 · s = 3 → 2.11e5 · s = 5 → 7.78e4</p>
+    <p class="mono">recorded 1.3e5 at mean 37 ⇔ channel std s = 3.84 · centred and scaled → 1.00</p>
+    <p>Confirm against the logged <code>x_std</code> from an uncentred run.</p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Verify before citing</span>
+    <p>This treats centring as a pure reparametrisation. The README describes the reference load as \(x_{\mathrm{ref}}[m,i,k]\), per candidate route. If it varies across an agent's candidates, centring adds a route-dependent offset \(-\sum_m \beta_m x_{\mathrm{ref}}[m,i,k]/\text{scale}_m\), which changes the <em>hypothesis class</em>, not just the conditioning. The paper must say which model its identifiability claim is about.</p>
+  </div>
+</section>
+
+<section class="thm" id="C6">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">C6</span>
+    <span class="thm-title">Nothing outside the policy's support is identifiable</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>If every observed regressor lies in a subspace \(S\) and the noise is Gaussian, then for any \(v \perp S\) the parameters \(\beta\) and \(\beta + tv\) induce identical data distributions for every \(t\). The Fisher information along \(v\) is zero and no unbiased estimator of \(v^\top\beta\) has finite variance.</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> The likelihood depends on \(\beta\) only through \(\psi_t^\top\beta\), which is unchanged by adding \(tv\). Then Cramér–Rao. <span class="qed">∎</span></p>
+  </div>
+  <p class="reading">Predicted costs for rarely-taken candidates carry unidentified components, so steering toward them rests on extrapolation the data cannot support. This is what justifies C3's floor rather than treating it as a defect.</p>
+</section>
+
+<section class="thm" id="Cstar">
+  <div class="thm-head">
+    <span class="thm-kind">Corollary</span><span class="thm-id">C★</span>
+    <span class="thm-title">Convergence erodes the stability margin</span>
+    <span class="thm-chips"><i class="chip strategy">conditional on B2</i></span>
+  </div>
+  <div class="statement">
+    <p>By eigenvalue interlacing, adding the rank-one mean term raises the smallest eigenvalue at most to the second-smallest eigenvalue of the covariance:</p>
+    <div class="dm">\[ \gamma = 2\lambda_{\min}\big(\mathbb{E}[\psi\psi^\top]\big) \;\le\; 2\lambda_2\big(\operatorname{Cov}\psi\big) \;\le\; \frac{2\operatorname{tr}\operatorname{Cov}(\psi)}{p-1}. \]</div>
+    <p>With C4, \(\gamma \to 0\) as fleet entropy vanishes, so \(g_{\mathrm{stab}} \to 0\): any fixed positive applied trust — including C3's floor — eventually exceeds the stability threshold.</p>
+  </div>
+  <p class="reading">This single corollary ties Parts B and C together: <em>the better the fleet learns, the less it can afford to trust what it has learned.</em> The predicted symptom is <code>pred_gain</code> decaying late in training while <code>fit_gain</code> holds.</p>
+</section>
+
+<hr class="div">
+
+<div class="part">
+  <span class="part-tag">Part D</span>
+  <h2>Safety of the wrapper — the floor property, quantified</h2>
+  <p class="lead">"Cannot drag the host below itself" is currently an implementation invariant. Part D gives it numbers and explains what trust learning actually responds to.</p>
+</div>
+
+<section class="thm" id="D1">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">D1</span>
+    <span class="thm-title">PACT‑1's policy class nests the host's</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>With trust off, \(g \equiv 0\) and \(\tilde\pi = \pi_{\text{host}}\) exactly; with learned trust, \(g \to 0\) as \(w \to -\infty\) and \(g_{\text{prev}} \to 0\). Hence \(\sup_{\text{PACT‑1}} J \ge \sup_{\text{host}} J\).</p>
+  </div>
+  <p class="reading">A statement about optimal policies, not about what training finds. It is gated bit-for-bit in the self-test; state it once and move on.</p>
+</section>
+
+<section class="thm" id="D2">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">D2</span>
+    <span class="thm-title">How far steering can move the policy</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i><i class="chip checked">checked</i></span>
+  </div>
+  <div class="statement">
+    <p>For any predicted costs — including adversarial ones — \(K\) options and population-standard-deviation z-scores:</p>
+    <div class="dm">\[
+    \operatorname{range}(z) \le \sqrt{2K}, \qquad
+    \mathrm{KL}\big(\pi_{\text{host}} \,\Vert\, \tilde\pi\big) \le \frac{g^2\kappa^2 K}{4}, \qquad
+    \mathrm{TV} \le g\kappa\sqrt{K/8},
+    \]</div>
+    <p>and for single-step rewards in an interval of width \(R\): \(\big|\mathbb{E}_{\tilde\pi} r - \mathbb{E}_{\pi} r\big| \le R\, g\kappa\sqrt{K/8}\).</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> For the extreme pair, \((z_a - z_b)^2 \le 2(z_a^2 + z_b^2) \le 2\sum_k z_k^2 = 2K\). Write \(\tilde\pi_k = \pi_k e^{\delta_k}/\mathbb{E}_\pi e^{\delta}\) with \(\delta = -g\kappa z\); then \(\mathrm{KL}(\pi\Vert\tilde\pi) = \log\mathbb{E}_\pi e^{\delta} - \mathbb{E}_\pi\delta \le \operatorname{range}(\delta)^2/8\) by Hoeffding's lemma, and \(\operatorname{range}(\delta) \le g\kappa\sqrt{2K}\). Pinsker gives TV, and \(|\mathbb{E}_p f - \mathbb{E}_q f| \le \operatorname{range}(f)\,\mathrm{TV}\). <span class="qed">∎</span></p>
+  </div>
+  <div class="check">
+    <span class="lbl">Checked with K = 4, κ = 1</span>
+    <p class="mono">largest z range over 200k random draws: 2.8284 = √8 (bound attained)</p>
+    <p class="mono">worst sampled KL vs bound:  g=0.1 0.0096 ≤ 0.010 · g=0.5 0.2346 ≤ 0.250 · g=0.9 0.7371 ≤ 0.810 · g=1.0 0.8877 ≤ 1.000</p>
+    <p class="mono">TV bound: g=0.9 → 0.636 · g=1.0 → 0.707</p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Scope</span>
+    <p>The bound is for fixed host parameters. During training the host and trust co-adapt, so it limits per-decision deviation — not final return against a separately trained IPPO. The sampled KL reaching 89% of its bound shows it is nearly tight.</p>
+  </div>
+</section>
+
+<section class="thm" id="D3">
+  <div class="thm-head">
+    <span class="thm-kind">Theorem</span><span class="thm-id">D3</span>
+    <span class="thm-title">The trust gradient is a covariance test</span>
+    <span class="thm-chips"><i class="chip proved">proved here</i></span>
+  </div>
+  <div class="statement">
+    <p>At the on-policy point, before clipping activates, with advantage \(A\) and entropy coefficient \(c_H\):</p>
+    <div class="dm">\[
+    \frac{\partial}{\partial w}\Big(\mathbb{E}_{\tilde\pi}[A] + c_H\, H(\tilde\pi)\Big)
+    = \kappa\, g'(w)\Big[-\operatorname{Cov}_{\tilde\pi}(A, z) + c_H\big(\operatorname{Cov}_{\tilde\pi}(z,\ell) - g\kappa\operatorname{Var}_{\tilde\pi}(z)\big)\Big],
+    \]</div>
+    <div class="dm">\[ g'(w) = \mathrm{conf}\cdot(1-\eta)\cdot g_{\max}\,\sigma'(w + b). \]</div>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> With \(\tilde\ell = \ell - g\kappa z\), \(\partial\log\tilde\pi_k/\partial g = -\kappa(z_k - \bar z)\) where \(\bar z = \mathbb{E}_{\tilde\pi} z\). The reward term is \(\sum_k A_k\,\partial\tilde\pi_k/\partial g = -\kappa\operatorname{Cov}_{\tilde\pi}(A,z)\). For entropy, \(\partial H/\partial g = \kappa\operatorname{Cov}_{\tilde\pi}(z, \log\tilde\pi)\), and \(\log\tilde\pi = \ell - g\kappa z - \text{const}\). Batch advantage normalisation rescales but cannot flip the sign, because \(\mathbb{E}_{\tilde\pi}[\nabla\log\tilde\pi] = 0\). The EMA state and confidence are frozen in the implementation's recomputation, which gives \(g'(w)\). <span class="qed">∎</span></p>
+  </div>
+  <p class="reading">Three consequences. <strong>(a)</strong> Trust grows only when the estimator's ranking agrees with realised advantage strongly enough to beat the entropy term. <strong>(b)</strong> An uninformative estimator, \(\operatorname{Cov}(A,z) = 0\), receives <em>zero</em> reward-gradient; trust decays only through the entropy bonus, at a rate proportional to \(c_H\,g\,\kappa^2\operatorname{Var}(z)\) — slow with \(c_H = 0.01\). <strong>(c)</strong> The interior stationary trust is \(g^\circ = [\operatorname{Cov}(z,\ell) - \operatorname{Cov}(A,z)/c_H]/(\kappa\operatorname{Var} z)\): once host logits already encode the prediction, entropy regularisation retires the estimator.</p>
+  <p class="obl"><span class="lbl">Obligates</span>A corrupted-estimate arm (the existing <code>freeze_beta</code> hook) showing trust decaying at the predicted entropy-driven rate.</p>
+</section>
+
+<section class="thm" id="D4">
+  <div class="thm-head">
+    <span class="thm-kind">Observation</span><span class="thm-id">D4</span>
+    <span class="thm-title">The inverted prior makes trust slow to learn</span>
+    <span class="thm-chips"><i class="chip checked">checked</i></span>
+  </div>
+  <div class="check">
+    <span class="lbl">From D3 with the shipped constants</span>
+    <p class="mono">σ(2.2) = 0.9002 · σ′(2.2) = 0.0898 · σ′(0) = 0.2500</p>
+    <p class="mono">g′(0) = conf × (1 − 0.9) × 1 × 0.0898 = conf × 0.00898</p>
+    <p class="mono">27.8× smaller than an unbiased sigmoid at conf = 1 · ≈111× at the C3 floor conf = 1/4</p>
+  </div>
+  <p class="reading">Starting trust high was the right call when the estimate is right, but it parks trust in the flat part of the sigmoid, and the EMA divides the gradient by ten again. The prediction is that the learned-trust arm will be statistically indistinguishable from fixed trust at 0.9. The paper can either claim trust as a safety valve rather than a learned quantity, or change the parametrisation — any change must re-pass the exact floor and shift-parity gates.</p>
+</section>
+
+<hr class="div">
+
+<div class="part">
+  <span class="part-tag">Part E</span>
+  <h2>Evaluation methodology as theory</h2>
+  <p class="lead">The placebo regime is not only a credibility device. It identifies effects that a separate σ = 0 run cannot.</p>
+</div>
+
+<section class="thm" id="E1">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">E1</span>
+    <span class="thm-title">Placebo days identify the effect of training under the dial</span>
+    <span class="thm-chips"><i class="chip proved">proved under (a)–(c)</i><i class="chip strategy">(a), (b) to verify</i></span>
+  </div>
+  <div class="statement">
+    <p>Assume (a) the observation contains no rewards or travel times; (b) the arm's policy and any online estimator are frozen during test; (c) the harm is applied after simulation, which holds by construction. In the test cycle, days 4000–4099 — 49 with \(A \gt 0\) and 51 with \(A = 0\) exactly, since day 4000 opens the bump at zero:</p>
+    <p><strong>(i)</strong> actions and simulator times do not depend on the weather;</p>
+    <p><strong>(ii)</strong> on \(A = 0\) days, recorded time equals simulator time exactly;</p>
+    <p><strong>(iii)</strong> the placebo-day difference between a σ‑trained and a σ0‑trained policy identifies the effect of <em>training</em> under the dial, uncontaminated by direct harm;</p>
+    <p><strong>(iv)</strong> within a run, the wet-minus-placebo difference is the direct harm on the frozen policy, exactly \((m_i - 1)\,t_i^{\mathrm{sim}}\).</p>
+  </div>
+  <div class="proof">
+    <p><span class="lbl">Proof.</span> Under (a) and (b) each day's actions are a function of the previous day's actions only; under (c) the simulator never sees the dial. So the action and simulator-time process is identical on wet and dry days. On dry days \(g \equiv 1\) and the harm multiplier is exactly 1 (identity at zero), which gives (ii)–(iv). <span class="qed">∎</span></p>
+  </div>
+  <div class="verify">
+    <span class="lbl">Verify</span>
+    <p><strong>(a)</strong> Confirm in RouteRL 2.0.0 that <code>previous_agents_plus_start_time</code> is route counts plus departure time, with no travel times.</p>
+    <p><strong>(b)</strong> Holds for arms evaluated deterministically. For PACT‑1 it is open: if its estimator keeps updating from harmed records during test, PACT‑1 is the only arm whose test actions respond to the weather. That is not a confound — the difference in wet-day degradation between PACT‑1 and the blind arm then measures the value of online identification, and it should be reported as such.</p>
+  </div>
+</section>
+
+<section class="thm" id="E2">
+  <div class="thm-head">
+    <span class="thm-kind">Proposition</span><span class="thm-id">E2</span>
+    <span class="thm-title">The σ = 0 wrapper is the stock task</span>
+    <span class="thm-chips"><i class="chip proved">proved by construction</i></span>
+  </div>
+  <div class="statement">
+    <p>At σ = 0 every reward and record passes through the wrapper unchanged, bit for bit, so the σ = 0 sweep is stock URB and every σ = 0 versus σ = 3 difference launched through the same entry point is attributable to the dial.</p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section id="paper">
+  <h3><span class="sect">3</span>What goes in the paper</h3>
+  <p>Twenty-five statements is an appendix, not a theory section. The main text should carry six grouped results, each paired with the experiment it predicts.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Main-text result</th><th>Built from</th><th>What it buys</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Severity moves URB out of light traffic</strong></td><td class="id">A7 · A4</td><td>Justifies injecting non-stationarity at all, and explains why AON wins at σ = 0</td></tr>
+        <tr><td><strong>A formal ceiling that reaches learners</strong></td><td class="id">A1 · A2 · A3 · A8</td><td>Turns the decomposition into a bound on no-regret outcomes, and separates learning gap from equilibrium gap</td></tr>
+        <tr><td><strong>Informational Braess on trust</strong></td><td class="id">B1 · B3 · B4</td><td>The novel core: a phase diagram in trust, and an honest limit on what selfish learning can claim</td></tr>
+        <tr><td><strong>The better it learns, the less it can trust</strong></td><td class="id">B2 · C4 · C★</td><td>Unifies identification and steering in one mechanism</td></tr>
+        <tr><td><strong>The floor property, quantified</strong></td><td class="id">D2 · D3</td><td>A near-tight deviation bound, and what trust learning actually tests</td></tr>
+        <tr><td><strong>Placebo decomposition</strong></td><td class="id">E1</td><td>Identifies the effect of training under drift without a second run</td></tr>
+      </tbody>
+    </table>
+    <caption>Appendix: A5, A6, C1, C2, C3, C5, C6, D1, D4, E2.</caption>
+  </div>
+  <div class="note">
+    <p><b>The paper's claim, stated so theory supports it.</b> Under selfish rewards, PACT‑1 identifies the city's congestion coupling online and uses it to shrink the learning gap — reaching and tracking equilibrium under drift where blind learners do not. Closing the equilibrium gap is a separate claim, and it requires a social objective (B4.1).</p>
+    <p><b>Discipline for every theorem added later.</b> If it does not predict something the experiments measure, it is padding, and reviewers will read it that way.</p>
+  </div>
+</section>
+
+<section id="experiments">
+  <h3><span class="sect">4</span>Cheapest checks first</h3>
+  <p>The first four run on the declared model or on logs that already exist. Together they can confirm or refute A5, A7, B1, B3, C2–C5 and D4 before any new RL compute is spent.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Check</th><th>Tests</th><th>Cost</th><th>Decides</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Declared-model PoA(σ)</strong> — equilibrium by best response, optimum by local search, \(\rho_{\max}\) per element, σ ∈ {0, 1, 2, 3}</td><td class="id">A7 A2</td><td>minutes</td><td>whether the dial creates coordination value on this city at all</td></tr>
+        <tr><td><strong>Steered fixed-point sweep</strong> — iterate the K = 4 steered fleet with the EMA forecast over \(g \in [0,1]\); record social cost and switching</td><td class="id">B1 B3 B4</td><td>minutes</td><td>whether a non-monotone trust curve exists before training for it</td></tr>
+        <tr><td><strong>Randomised controllable set</strong> — rerun the decomposition with random rather than id-prefix agents, shares 0.1–1.0</td><td class="id">A5</td><td>minutes</td><td>whether the N-scaling curve is about share or selection</td></tr>
+        <tr><td><strong>Read existing debug CSVs</strong> — conf, trust_pol, trust_app, x_std, pred_gain vs fit_gain, route_switch_frac</td><td class="id">C2 C3 C4 C5 D4 C★</td><td>zero</td><td>whether the identification theorems match the runs already made</td></tr>
+        <tr><td><strong>Fixed-trust sweep</strong> — \(g \in \{0.1, 0.3, 0.5, 0.7, 0.9, 1.0\}\), at least three seeds</td><td class="id">B2 B3</td><td>RL</td><td>the headline trust figure in the full system</td></tr>
+        <tr><td><strong>Corrupted-estimate arm</strong> via <code>freeze_beta</code></td><td class="id">D3</td><td>RL</td><td>whether trust retires an uninformative estimator at the predicted rate</td></tr>
+        <tr><td><strong>Non-selfish reward arm</strong>, after extending the severity layer's reward mapping</td><td class="id">B4.1</td><td>RL + code</td><td>whether any coordination-gap claim is available</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="literature">
+  <h3><span class="sect">5</span>Literature to verify</h3>
+  <p>These are the results the document leans on, as I understand them. Check exact statements, constants and side conditions against the primary sources before citing — the value of several theorems rests on the specialisation being airtight.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Source</th><th>Result relied on</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td>Rosenthal (1973); Monderer &amp; Shapley (1996)</td><td>Congestion games have exact potentials; finite improvement property</td><td class="id">A1</td></tr>
+        <tr><td>Bilò, Fanelli, Flammini &amp; Moscardelli</td><td>Graphical congestion games on social graphs</td><td class="id">A1 A2</td></tr>
+        <tr><td>Christodoulou &amp; Koutsoupias (2005); Awerbuch, Azar &amp; Epstein (2005)</td><td>Atomic affine congestion games: PoA 5/2, tight</td><td class="id">A2 A3</td></tr>
+        <tr><td>Roughgarden (2009; JACM 2015)</td><td>(λ, μ)-smoothness extends to coarse correlated equilibria and no-regret outcomes; approximate equilibria</td><td class="id">A2 A6</td></tr>
+        <tr><td>Roughgarden &amp; Tardos (2002)</td><td>Nonatomic affine selfish routing: PoA 4/3</td><td class="id">B4</td></tr>
+        <tr><td>Roughgarden (2003)</td><td>PoA independent of topology; anarchy value via Pigou networks</td><td class="id">A7</td></tr>
+        <tr><td>Colini-Baldeschi, Cominetti, Mertikopoulos &amp; Scarsini</td><td>PoA tends to 1 in light and heavy traffic</td><td class="id">A7</td></tr>
+        <tr><td>Harks, Hoefer, Klimm &amp; Skopalik; Banner &amp; Orda (2007)</td><td>Bottleneck congestion games: pure strong equilibria; PoA can be unbounded</td><td class="id">A6</td></tr>
+        <tr><td>McKelvey &amp; Palfrey (1995)</td><td>Quantal response equilibrium</td><td class="id">B1</td></tr>
+        <tr><td>Acemoglu, Makhdoumi, Malekian &amp; Ozdaglar (2018)</td><td>Informational Braess' paradox</td><td class="id">B3 B4</td></tr>
+        <tr><td>Perdomo, Zrnic, Mendler-Dünner &amp; Hardt (2020)</td><td>Performative prediction: repeated risk minimisation stable iff ε &lt; γ/β</td><td class="id">B2</td></tr>
+        <tr><td>Mendler-Dünner, Perdomo, Zrnic &amp; Hardt (2020); Narang, Faulkner, Drusvyatskiy, Fazel &amp; Ratliff</td><td>Stochastic and multi-player performative prediction; decision-dependent games</td><td class="id">B2</td></tr>
+        <tr><td>Guo &amp; Ljung (1995)</td><td>Tracking performance of adaptive algorithms under drift</td><td class="id">C1</td></tr>
+        <tr><td>Åström &amp; Wittenmark; Fortescue, Kershenbaum &amp; Ydstie (1981)</td><td>Covariance windup without excitation; variable forgetting</td><td class="id">C2</td></tr>
+        <tr><td>Feldbaum (1960s)</td><td>Dual control: the exploration–identification tension</td><td class="id">C4 C6</td></tr>
+        <tr><td>Korilis, Lazar &amp; Orda (1997); Roughgarden (2004)</td><td>Stackelberg routing — only if humans adapt after mutation</td><td class="id">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="foot">
+  <p><strong>Provenance.</strong> Model and statements are written against <code>urb_ns/</code>, <code>pact1/</code> and <code>results/ns_certificate/certificate_saint_arnoult_config1.json</code>. Checked values were recomputed on 16 September 2026 with the implementation's own driver, network, loading, estimator and steering code. Proofs marked "proved here" are complete for the stated assumptions; every other status names what is still owed.</p>
+  <p><strong>Open implementation questions.</strong> Whether PACT‑1's estimator keeps updating during the test phase (E1b); whether the reference load is per candidate route (C5); the exact contents of RouteRL's observation (E1a).</p>
+</footer>
+
+</main>
+</div>
+</div>
