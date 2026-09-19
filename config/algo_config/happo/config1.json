@@ -1,0 +1,53 @@
+{
+    "desc": [
+        "HAPPO (ICLR 2022 / JMLR 2024) on URB. paper/BASELINES.md B1.",
+        "Host block == ippo/config1.json, so an arm difference is not a tuning",
+        "difference. The 'happo' block is HARL's own defaults from",
+        "harl/configs/algos_cfgs/happo.yaml, except where URB's config already",
+        "fixes the quantity (lr, clip_eps, entropy_coef, num_epochs, widths).",
+        "",
+        "  critic_epoch, critic_num_mini_batch, actor_num_mini_batch,",
+        "  value_loss_coef, use_clipped_value_loss, use_huber_loss, huber_delta,",
+        "  use_valuenorm, max_grad_norm, fixed_order, gain,",
+        "  use_feature_normalization  -> happo.yaml verbatim.",
+        "  episode_length: null -> the host's batch_size, i.e. HAPPO collects as",
+        "  many fresh days per update as URB's IPPO does.",
+        "  ppo_epoch: null -> the host's num_epochs (happo.yaml says 5; using the",
+        "  host's keeps the number of passes over the data equal across arms).",
+        "  critic_lr: null -> the host's lr.",
+        "",
+        "use_feature_normalization is LOAD-BEARING on URB and is not cosmetic: see",
+        "docs/baselines/CHECKLIST_happo.md item NET-1."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "happo": {
+        "ppo_epoch": null,
+        "critic_epoch": 5,
+        "actor_num_mini_batch": 1,
+        "critic_num_mini_batch": 1,
+        "episode_length": null,
+        "critic_lr": null,
+        "value_loss_coef": 1.0,
+        "use_clipped_value_loss": true,
+        "use_huber_loss": true,
+        "huber_delta": 10.0,
+        "use_valuenorm": true,
+        "max_grad_norm": 10.0,
+        "fixed_order": false,
+        "gain": 0.01,
+        "use_feature_normalization": true,
+        "print_every": 100
+    }
+}

@@ -1,0 +1,30 @@
+{
+    "desc": [
+        "Oracle-driver IPPO on URB -- the information arm, not a published method.",
+        "paper/BASELINES.md Tier 1 item 4 and the objection-table row 'Give the",
+        "learner the same information PACT has'.",
+        "Host block == ippo/config1.json. The ONLY difference from URB's IPPO is",
+        "that A(day) is appended to the observation.",
+        "",
+        "  context_features = a  publish A(t) and nothing else, which is what B6",
+        "      specifies. 'a_phase' additionally publishes the cycle phase and is",
+        "      a declared ablation, because it hands over the cycle LENGTH too."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "oracle_ippo": {
+        "context_features": "a",
+        "print_every": 100
+    }
+}

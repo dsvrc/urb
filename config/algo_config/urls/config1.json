@@ -1,0 +1,37 @@
+{
+    "desc": [
+        "Unstructured RLS on raw peer actions on URB. paper/BASELINES.md B10.",
+        "Same controller as eso/config1.json, same epsilon-greedy schedule; the",
+        "estimator is the only difference, which is what the arm isolates.",
+        "",
+        "  forget = 0.999, p0 = 10.0  the standard exponentially-weighted RLS",
+        "      constants, and the same ones pact1/config1.json declares -- so the",
+        "      comparison is the REGRESSOR (raw peer actions vs a declared road-",
+        "      class basis) and not the filter.",
+        "  peer_scope = fleet  the machine agents, i.e. the broadcast set B10's",
+        "      'the N-1 broadcast actions' names. 'all' adds the humans and squares",
+        "      the covariance memory; max_p_mb refuses the run rather than",
+        "      thrashing."
+    ],
+    "training_eps": 4000,
+    "eps_init": 1.0,
+    "eps_decay": 0.9985,
+    "eps_min": 0.0,
+    "buffer_size": 2048,
+    "batch_size": 32,
+    "lr": 0.001,
+    "num_epochs": 1,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "update_every": 1,
+    "urls": {
+        "forget": 0.999,
+        "p0": 10.0,
+        "peer_scope": "fleet",
+        "max_p_mb": 2048.0,
+        "print_every": 100
+    }
+}

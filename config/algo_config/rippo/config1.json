@@ -1,0 +1,32 @@
+{
+    "desc": [
+        "R-IPPO on URB -- the memory arm. paper/BASELINES.md B2.",
+        "Host block == ippo/config1.json: the ONLY difference from URB's IPPO is",
+        "the GRU, which is the point of the arm.",
+        "",
+        "  data_chunk_length, num_mini_batch -> marlbenchmark/on-policy defaults",
+        "      (10 and 1). The GRU layer is onpolicy/algorithms/utils/rnn.py:",
+        "      nn.GRU with orthogonal weights and zero biases, then LayerNorm.",
+        "  The hidden state is carried across DAYS and is never reset; see",
+        "  CHECKLIST_rippo.md item SEQ-1 for why a per-episode reset would make",
+        "  this arm numerically identical to plain IPPO."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "rippo": {
+        "data_chunk_length": 10,
+        "num_mini_batch": 1,
+        "print_every": 100
+    }
+}

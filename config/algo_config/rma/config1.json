@@ -1,0 +1,45 @@
+{
+    "desc": [
+        "RMA / UP-OSI on URB. paper/BASELINES.md B8 ('implemented in-house').",
+        "Host block == ippo/config1.json.",
+        "",
+        "  z_dim = 8       RMA's extrinsics dimension.",
+        "  history_len = 50  RMA's adaptation window.",
+        "  phi_channels, the Linear -> 3 x Conv1d -> Linear stack -> RMA's",
+        "      'three-layer 1-D CNN' adaptation module.",
+        "  phase1_frac = 0.5  half the training days train the privileged teacher,",
+        "      half distil the history encoder. RMA's two phases have no shared",
+        "      budget to copy, so the split is declared here and printed.",
+        "  phase2_act = student  roll out with z_hat while phi is trained (RMA's",
+        "      on-policy phase 2, and UP-OSI's DAgger iteration).",
+        "  history_features = oar  observation, action AND the realised reward.",
+        "      RMA uses (state, action) only; URB's observation contains no travel",
+        "      time, so without the reward there is nothing to identify from. Run",
+        "      'oa' as the ablation -- see CHECKLIST_rma.md item HIST-1."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "rma": {
+        "z_dim": 8,
+        "history_len": 50,
+        "history_features": "oar",
+        "phi_channels": 32,
+        "phi_lr": 0.001,
+        "phi_buffer": 20000,
+        "phase1_frac": 0.5,
+        "phase2_act": "student",
+        "context_features": "a",
+        "print_every": 100
+    }
+}

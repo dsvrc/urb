@@ -1,0 +1,38 @@
+{
+    "desc": [
+        "ESO / DOB on URB -- linear ADRC. paper/BASELINES.md B10.",
+        "This arm does not learn: there is no network, no optimiser and no reward",
+        "anywhere in it. The host block is iql/config1.json and is only read for the",
+        "epsilon-greedy schedule (eps_init / eps_decay / eps_min), which supplies",
+        "the excitation a control law does not have on a discrete choice; those",
+        "three values are iql/config1.json's. training_eps and the rest are kept",
+        "so the arm runs for the same number of days as every other.",
+        "",
+        "  arm = eso1   B10's 'first-order observer ... one gain'.",
+        "  beta = 0.5   the one gain: an observer time constant of about two days,",
+        "      far faster than the 100-day weather cycle and slower than daily",
+        "      noise. Declared, never tuned on returns.",
+        "  omega = 0.5  the second-order (eso2) bandwidth, Gao's parameterisation",
+        "      beta1 = 2*omega, beta2 = omega^2 with h = 1 day."
+    ],
+    "training_eps": 4000,
+    "eps_init": 1.0,
+    "eps_decay": 0.9985,
+    "eps_min": 0.0,
+    "buffer_size": 2048,
+    "batch_size": 32,
+    "lr": 0.001,
+    "num_epochs": 1,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "update_every": 1,
+    "eso": {
+        "arm": "eso1",
+        "beta": 0.5,
+        "omega": 0.5,
+        "print_every": 100
+    }
+}

@@ -1,0 +1,44 @@
+{
+    "desc": [
+        "MF-Q (ICML 2018) on URB. paper/BASELINES.md B4.",
+        "Host block == iql/config1.json, so the difference from URB's IQL is",
+        "exactly the mean-action input.",
+        "",
+        "  mf_hidden = 64, mf_embed = 32  the release's prob embedding branch",
+        "      (Linear(K,64) -> ReLU -> Linear(64,32)), mfrl_pytorch algo/base.py.",
+        "  field_scope = od  every traveller on the same OD pair, humans included.",
+        "      Averaging one-hot action vectors is only meaningful where the action",
+        "      index means the same road for everybody; see CHECKLIST_mfq.md item",
+        "      FIELD-1. 'all' reproduces the release's group-wide mean.",
+        "  exploration = epsilon  the host schedule. The paper's Boltzmann",
+        "      temperature is in the units of ITS rewards, and URB pays -1000; set",
+        "      exploration = boltzmann with a temperature on the scale of the Q",
+        "      differences to run the paper's rule instead."
+    ],
+    "training_eps": 4000,
+    "eps_init": 1.0,
+    "eps_decay": 0.9985,
+    "eps_min": 0.0,
+    "buffer_size": 2048,
+    "batch_size": 32,
+    "lr": 0.001,
+    "num_epochs": 1,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "update_every": 1,
+    "mfq": {
+        "field_scope": "od",
+        "mf_hidden": 64,
+        "mf_embed": 32,
+        "exploration": "epsilon",
+        "temperature": 50.0,
+        "temperature_decay": 0.999,
+        "temperature_min": 1.0,
+        "graph": "od",
+        "n_neighbors": 3,
+        "print_every": 100
+    }
+}

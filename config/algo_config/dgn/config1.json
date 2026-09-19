@@ -1,0 +1,47 @@
+{
+    "desc": [
+        "DGN (ICLR 2020) on URB. paper/BASELINES.md B3.",
+        "Host block == iql/config1.json.",
+        "",
+        "  n_neighbors = 3, n_heads = 8, dv = 16 (so tau = 1/sqrt(dv) = 0.25),",
+        "  reg_lambda = 0.03, 2 convolutional layers  -> the paper's Table 4.",
+        "  arm = dgn  WITH temporal relation regularisation, which is part of the",
+        "      method; 'dgn_r' is the paper's own ablation without it.",
+        "  graph = overlap  two travellers are neighbours when their OD pairs'",
+        "      route sets share a link AND their trips are co-present. That is the",
+        "      coupling graph; 'copresence' and 'od' are the cheaper alternatives.",
+        "      Needs the generated route table -- pass --routes if it is not found.",
+        "  Weights are SHARED across agents, as in the paper: the graph convolution",
+        "      is defined on shared weights.",
+        "  normalize_target = true  the regression target is standardised.",
+        "      Without it URBs -1000 reward scale drives the features to ~50,",
+        "      the attention logits are quadratic in that, and every softmax",
+        "      saturates into a hard argmax -- the graph convolution stops",
+        "      being one. Measured; see CHECKLIST_dgn.md item SCALE-1."
+    ],
+    "training_eps": 4000,
+    "eps_init": 1.0,
+    "eps_decay": 0.9985,
+    "eps_min": 0.0,
+    "buffer_size": 2048,
+    "batch_size": 32,
+    "lr": 0.001,
+    "num_epochs": 1,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "update_every": 1,
+    "dgn": {
+        "arm": "dgn",
+        "n_neighbors": 3,
+        "n_heads": 8,
+        "dv": 16,
+        "reg_lambda": 0.03,
+        "graph": "overlap",
+        "normalize_target": true,
+        "slack": 0.0,
+        "print_every": 100
+    }
+}

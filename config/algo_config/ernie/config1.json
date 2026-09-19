@@ -1,0 +1,44 @@
+{
+    "desc": [
+        "ERNIE (NeurIPS 2023) on URB. paper/BASELINES.md B9.",
+        "Host block == ippo/config1.json.",
+        "",
+        "  lam, perturb_steps  -> abukharin3/ERNIE Algorithms/configs/",
+        "      config_qcombo_adv.py (config.alg.lam = 0.5, perturb_num_steps = 1).",
+        "  eps -> the paper grid-searches epsilon and lambda per environment",
+        "      (Appendix F); 0.1 in RELATIVE units is the value this repo runs and",
+        "      is declared here rather than tuned on returns.",
+        "  alpha: 0 -> alpha = eps. With one PGD step and an l2-normalised",
+        "      direction that is the exact solution of the linearised inner max,",
+        "      i.e. the l2 FGSM attack.",
+        "  relative -> the released code's `* torch.abs(obs)` scaling, which URB",
+        "      needs because its observation mixes a start time in seconds with",
+        "      route counts. See CHECKLIST_ernie.md item EPS-2.",
+        "  D = KL: paper Section 5.1, 'when optimizing stochastic policies (e.g.,",
+        "      MAPPO), D can be taken to be the KL divergence'."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "ernie": {
+        "arm": "ernie",
+        "lam": 0.5,
+        "eps": 0.1,
+        "alpha": 0.0,
+        "perturb_steps": 1,
+        "relative": true,
+        "scale_floor": 0.0,
+        "init_std": 0.001,
+        "print_every": 100
+    }
+}

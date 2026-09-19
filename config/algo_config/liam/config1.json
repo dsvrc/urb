@@ -1,0 +1,44 @@
+{
+    "desc": [
+        "LIAM (NeurIPS 2021) on URB. paper/BASELINES.md B5.",
+        "Host block == ippo/config1.json (LIAM's learner is A2C, so only lr,",
+        "entropy_coef, batch_size and the widths carry over).",
+        "",
+        "  embedding_dim = 20, encoder_lr = 7e-4 (lr2), max_grad_norm = 0.5",
+        "      -> uoe-agents/LIAM lb_foraging/run_tests.py.",
+        "  backprop_embeddings = false -> run_tests.py's default: the embedding is",
+        "      DETACHED into the policy, so the encoder is trained by the",
+        "      reconstruction loss alone. That separation is the method.",
+        "  n_modelled = 3  LIAM's largest setting; the modelled set is the 3",
+        "      nearest same-OD machine peers by departure time.",
+        "  standardize_targets = true  the observation reconstruction target is",
+        "      standardised per dimension. Without it URB's start-time coordinate",
+        "      (order 1000, constant per traveller) is 99.99% of the squared error",
+        "      and the decoder learns three constants. See CHECKLIST_liam.md",
+        "      item SCALE-1 for the measurement."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "liam": {
+        "embedding_dim": 20,
+        "hidden_dim": 64,
+        "encoder_lr": 0.0007,
+        "max_grad_norm": 0.5,
+        "n_modelled": 3,
+        "backprop_embeddings": false,
+        "graph": "od",
+        "standardize_targets": true,
+        "print_every": 100
+    }
+}

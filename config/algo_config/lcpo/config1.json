@@ -1,0 +1,66 @@
+{
+    "desc": [
+        "LCPO (ICLR 2025) on URB. paper/BASELINES.md B6.",
+        "Host hyperparameters are IDENTICAL to ippo/config1.json so an arm",
+        "difference cannot be an algorithm difference. Everything under 'lcpo' is",
+        "either the authors' own value (sourced in the comment below) or a value",
+        "URB forces, and those are listed in docs/baselines/CHECKLIST_lcpo.md.",
+        "",
+        "Sources for the 'lcpo' block:",
+        "  trpo_kl_in/out, trpo_damping, ood_subsample, value_lr  ->",
+        "      LCPO/windy-gym/run_config_phase1.py, the 'lcpo_continual' entry:",
+        "      --trpo_kl_in 1e-1 --trpo_kl_out 1e-4 --trpo_damping 1e-1",
+        "      --ood_subsample 100 --val_lr_rate 1e-3 --n_hid 64 64",
+        "  ood_dist/lcpo_thresh -> LCPO/windy-gym/param.py defaults (l2, -9), i.e.",
+        "      every reservoir anchor is used. The paper's --lcpo_thresh 1 is in",
+        "      the units of a 6-D wind context and does not transfer to a rainfall",
+        "      intensity in [0, 1]; see the checklist, item OOD-3.",
+        "  master_batch -> LCPO's own per-algorithm setting (200 for LCPO, 3200",
+        "      for TRPO in the same sweep). On URB it must be shorter than the",
+        "      context's coherence time; the declared rule is max(8, period//5).",
+        "  auto_target_entropy -> null: the host's fixed entropy_coef is used so",
+        "      the exploration pressure matches every other arm. Set 0.1 to",
+        "      reproduce the authors' auto-tuned entropy exactly."
+    ],
+
+    "training_eps": 4000,
+
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [64, 64],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+
+    "lcpo": {
+        "arm": "lcpo",
+
+        "trpo_kl_in": 0.1,
+        "trpo_kl_out": 0.0001,
+        "trpo_damping": 0.1,
+        "trpo_dual": false,
+
+        "master_batch": null,
+        "ood_dist": "all",
+        "lcpo_thresh": -9.0,
+        "ood_subsample": 100,
+        "ood_capacity": null,
+        "ood_cov_ridge": 1e-8,
+
+        "value_lr": 0.001,
+        "auto_target_entropy": null,
+        "entropy_max": 0.03,
+        "ent_lr": 0.001,
+
+        "ppo_iters": 30,
+        "ppo_clip": 0.2,
+        "ppo_kl_in": 0.1,
+        "lcppo_kappa": 1.0,
+
+        "context_features": "a",
+        "print_every": 100
+    }
+}

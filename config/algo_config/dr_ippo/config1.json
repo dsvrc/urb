@@ -1,0 +1,37 @@
+{
+    "desc": [
+        "Domain randomisation over severity on URB. paper/BASELINES.md B9's",
+        "'must, zero cost' arm: 'resample sigma in [0, 3] per episode, train the",
+        "stock learner, evaluate at the committed sigma'.",
+        "Host block == ippo/config1.json. The learner is URB's IPPO and is never",
+        "told sigma; only the environment changes.",
+        "",
+        "  dr_range = [0, 3]  B9's range verbatim.",
+        "  sigma_floor = 1e-9  a draw of exactly 0 would fall off the severity",
+        "      wrapper's bookkeeping path for one day; the floor keeps it on that",
+        "      path while being 1.0 to fifteen significant figures. The TEST phase",
+        "      does not use the floor -- the randomiser is detached entirely, so",
+        "      evaluating at sigma = 0 is byte-identical to a stock run."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "dr_ippo": {
+        "dr_range": [
+            0.0,
+            3.0
+        ],
+        "sigma_floor": 1e-09,
+        "print_every": 100
+    }
+}
