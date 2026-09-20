@@ -15,7 +15,19 @@
         "      standardised per dimension. Without it URB's start-time coordinate",
         "      (order 1000, constant per traveller) is 99.99% of the squared error",
         "      and the decoder learns three constants. See CHECKLIST_liam.md",
-        "      item SCALE-1 for the measurement."
+        "      item SCALE-1 for the measurement.",
+        "",
+        "MEASURED PROPERTY OF URB'S SHIPPED NETWORKS, 2026-09-19: the median",
+        "origin-destination pair carries exactly ONE traveller on all seven of them",
+        "(agents/ODs = 222/215, 636/629, 362/352, 729/724, 523/517, 1035/306), and",
+        "only 0.7-3.2% of travellers ever have an EARLIER same-OD peer -- except on",
+        "ingolstadt_custom, where it is 70%. So on saint_arnoult the observation's",
+        "four count coordinates are zero for 97% of travellers on every day of the",
+        "run. Three defaults below follow from that; see the checklist item named.",
+        "  graph = overlap (NOT od): a same-OD modelled set would be almost",
+        "      entirely padding with the agent itself, so the decoder would",
+        "      reconstruct what the encoder already has. The arm reports how",
+        "      many slots were padded. See CHECKLIST_liam.md MOD-1."
     ],
     "training_eps": 4000,
     "batch_size": 64,
@@ -37,7 +49,7 @@
         "max_grad_norm": 0.5,
         "n_modelled": 3,
         "backprop_embeddings": false,
-        "graph": "od",
+        "graph": "overlap",
         "standardize_targets": true,
         "print_every": 100
     }

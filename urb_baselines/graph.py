@@ -13,11 +13,19 @@ URB gives three candidate structures, and the right one is NOT the same for all
 three, so the choice is made per baseline and recorded in its checklist:
 
 ``od``          same origin-destination pair.
-                The ONLY structure under which averaging one-hot action vectors
+                The only structure under which averaging one-hot action vectors
                 is meaningful: action ``k`` indexes the ``k``-th route OF AN OD
                 PAIR, so route 0 for OD A and route 0 for OD B are different
-                roads and their one-hot mean is not a quantity. MF-Q therefore
-                defaults here.
+                roads and their one-hot mean is not a quantity.
+
+                **On every URB network shipped with the benchmark this set is a
+                SINGLETON and is therefore useless.** Measured: the median OD
+                pair has exactly one traveller on all seven networks, and the
+                maximum is two on six of them (the exception is
+                ``ingolstadt_custom``, where 306 OD pairs carry 1035
+                travellers). No arm here defaults to ``od`` for that reason;
+                it is kept because it is the semantically correct reading and
+                because a future network may populate it.
 
 ``copresence``  trips that are on the road at the same time
                 (``urb_ns.network.build_co_presence``, departure time plus mean
@@ -45,7 +53,65 @@ is therefore fixed before the first episode -- which is what lets a baseline say
 
 import numpy as np
 
-__all__ = ["NeighbourGraph"]
+__all__ = ["NeighbourGraph", "build_from_ctx"]
+
+
+# ==========================================================================
+#  building one from a HostContext, with the fallbacks in ONE place
+# ==========================================================================
+def _load_routes(ctx, tag):
+    """The generated route table, or ``(None, None)`` with a printed reason."""
+    if not getattr(ctx, "routes_csv", None):
+        return None, None
+    try:
+        from urb_ns.network import load_route_table
+        routes, ffts = load_route_table(ctx.routes_csv,
+                                        int(ctx.params["number_of_paths"]))
+    except Exception as exc:                              # noqa: BLE001
+        print(f"[{tag}][WARN] could not read the route table "
+              f"{ctx.routes_csv}: {type(exc).__name__}: {exc}", flush=True)
+        return None, None
+    return routes, {od: float(np.mean(v)) for od, v in ffts.items()}
+
+
+def _durations_from_freeflow(ctx):
+    out = {}
+    for od, row in ctx.free_flow.items():
+        r = np.asarray(row, dtype=np.float64)
+        r = r[np.isfinite(r)]
+        if r.size:
+            out[od] = float(r.mean())
+    return out
+
+
+def build_from_ctx(ctx, mode="overlap", n_neighbors=3, slack=0.0, tag="URB-BL",
+                   verbose=True):
+    """``NeighbourGraph`` from a ``HostContext``, with the route-table fallback.
+
+    ``overlap`` needs the generated route table; when it is missing the mode
+    falls back to ``copresence`` and says so, rather than raising -- a config
+    that names a graph the city cannot build should degrade to the next best
+    structure with a warning, not take the run down seventeen minutes in.
+
+    Trip durations always come from the environment's own published free-flow
+    times when the route table is unavailable, so ``copresence`` is never
+    reduced to "departs at the same second".
+    """
+    routes = None
+    dur = None
+    mode = str(mode).lower()
+    if mode == "overlap":
+        routes, dur = _load_routes(ctx, tag)
+        if routes is None:
+            print(f"[{tag}][WARN] graph='overlap' needs the route table and none "
+                  f"was found; falling back to 'copresence'. Pass --routes to "
+                  f"use the coupling graph.", flush=True)
+            mode = "copresence"
+    if dur is None:
+        dur = _durations_from_freeflow(ctx)
+    return NeighbourGraph(ctx.agent_table, ctx.av_ids, mode=mode,
+                          n_neighbors=int(n_neighbors), routes_by_od=routes,
+                          durations=dur, slack=float(slack), verbose=verbose)
 
 
 class NeighbourGraph(object):

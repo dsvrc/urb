@@ -15,7 +15,21 @@
         "      needs because its observation mixes a start time in seconds with",
         "      route counts. See CHECKLIST_ernie.md item EPS-2.",
         "  D = KL: paper Section 5.1, 'when optimizing stochastic policies (e.g.,",
-        "      MAPPO), D can be taken to be the KL divergence'."
+        "      MAPPO), D can be taken to be the KL divergence'.",
+        "",
+        "MEASURED PROPERTY OF URB'S SHIPPED NETWORKS, 2026-09-19: the median",
+        "origin-destination pair carries exactly ONE traveller on all seven of them",
+        "(agents/ODs = 222/215, 636/629, 362/352, 729/724, 523/517, 1035/306), and",
+        "only 0.7-3.2% of travellers ever have an EARLIER same-OD peer -- except on",
+        "ingolstadt_custom, where it is 70%. So on saint_arnoult the observation's",
+        "four count coordinates are zero for 97% of travellers on every day of the",
+        "run. Three defaults below follow from that; see the checklist item named.",
+        "  scale_floor = 1.0 (NOT the released 0.0): the released relative",
+        "      scaling multiplies the perturbation by |o|, so a coordinate",
+        "      that is exactly zero is never perturbed -- which on URB is",
+        "      four of the five coordinates. The floor is one traveller, the",
+        "      natural quantum of a count. scale_floor = 0.0 restores the",
+        "      released behaviour. See CHECKLIST_ernie.md ADAPT-1."
     ],
     "training_eps": 4000,
     "batch_size": 64,
@@ -37,7 +51,7 @@
         "alpha": 0.0,
         "perturb_steps": 1,
         "relative": true,
-        "scale_floor": 0.0,
+        "scale_floor": 1.0,
         "init_std": 0.001,
         "print_every": 100
     }

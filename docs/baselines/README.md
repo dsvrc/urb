@@ -57,8 +57,19 @@ the dial off, and is the no-severity row.
 ```bash
 TIER=all ARMS=1 bash scripts/sweep/run_baselines_sigma3.sh 0   # + Tier 2 + ablations
 ONLY="lcpo_0 eso_0"  bash scripts/sweep/run_baselines_sigma3.sh 0
+DEVICE=cpu           bash scripts/sweep/run_baselines_sigma3.sh 0   # force CPU
 DRYRUN=1             bash scripts/sweep/run_baselines_sigma3.sh 0   # print, run nothing
 ```
+
+`DEVICE=cpu` does two things: it passes `--device cpu` to every baseline, and it
+exports `CUDA_VISIBLE_DEVICES=""`, which also fixes `scripts/pact1.py`,
+`scripts/ippo.py` and every other stock URB script — all of them pick the device
+with the same `torch.device(0) if torch.cuda.is_available()` line and none of
+them has a flag for it.
+
+**If a run is killed** (Ctrl-C, SIGTERM, a scheduler) the runner stops rather
+than launching the remaining arms into the same thing. Without that, one
+interruption is reported as a list of failures.
 
 Every knob is documented in the header of
 [`scripts/sweep/run_baselines.sh`](../../scripts/sweep/run_baselines.sh).
@@ -69,6 +80,50 @@ Completed arms leave a `.done` marker so the runner is resumable.
 `TASK_CONF` and route table. The runner bootstraps exactly the same pinned table
 (`results/routegen_<net>_<seed>/routes.csv`), so running either one first is
 fine.
+
+### Resuming, and what each arm costs
+
+Completed arms leave a `.done` marker beside their log, and the runner skips
+them, so re-running the same command after an interruption picks up where it
+stopped. A failed arm writes **no** marker, so a re-run retries it. To force a
+completed arm to re-run, delete its marker:
+
+```bash
+rm logs/bl_s3/lcpo_0.log.done
+ONLY="lcpo_0" bash scripts/sweep/run_baselines_sigma3.sh 0
+```
+
+Every arm prints `d/min` and an `eta` for the remaining training days every
+`print_every` days, so its cost is knowable from the first few hundred days
+rather than at the end.
+
+**The device is probed before SUMO starts.** `torch.cuda.is_available()` only
+reports that a driver and a device exist; it says nothing about whether this
+torch build has kernels for that GPU's compute capability. When it does not, the
+error is `CUDA error: no kernel image is available for execution on the device`,
+raised at the FIRST forward pass — which on URB is after the 200-day
+human-learning phase, seventeen minutes in. One matmul and one backward at
+startup turn that into an immediate message. `auto` then falls back to CPU and
+says so; an explicit `--device cuda` that fails is fatal, because silently
+running somewhere else is not what was asked for.
+
+Measured ALGORITHM cost over a 4000-day run at `saint_arnoult`'s scale (222
+travellers, 88 machines, K = 4), excluding the environment step — that part is
+SUMO and is common to every arm:
+
+| arm | min | ×IPPO | | arm | min | ×IPPO |
+|---|---|---|---|---|---|---|
+| eso | 0.2 | 0.04 | | rma | 5.7 | 1.1 |
+| happo | 4.2 | 0.8 | | ernie | 6.7 | 1.3 |
+| urls | 4.6 | 0.9 | | dgn | 7.6 | 1.4 |
+| ippo (URB's own) | 5.3 | 1.0 | | rippo | 7.8 | 1.5 |
+| oracle_ippo | 5.8 | 1.1 | | liam | 8.6 | 1.6 |
+| iql (URB's own) | 15.4 | 2.9 | | lcpo | 16.9 | 3.2 |
+| | | | | mfq | 19.2 | 3.6 |
+
+The spread is **at most ~15 minutes** across the whole set, so an arm that takes
+hours longer than another is not being slowed by its algorithm — look at the
+`d/min` line, or at SUMO.
 
 ### Before a long run
 
@@ -153,6 +208,44 @@ Each was **measured** on `urb_baselines/fakeenv.py`, not guessed; the numbers ar
 in the relevant checklist and in the module docstring. Each has an off switch so
 the degenerate behaviour can be reproduced.
 
+### The fourth thing, which is about the cities: URB's OD pairs are singletons
+
+Measured over the seven networks URB ships (`networks/*/agents.csv`):
+
+| network | travellers | distinct OD pairs | median / OD | with ≥1 earlier same-OD peer |
+|---|---|---|---|---|
+| saint_arnoult | 222 | 215 | 1 | 3.2% |
+| gretz_armainvilliers | 636 | 629 | 1 | 1.1% |
+| nangis | 362 | 352 | 1 | 2.8% |
+| nemours | 729 | 724 | 1 | 0.7% |
+| provins | 523 | 517 | 1 | 1.1% |
+| ingolstadt_custom(2) | 1035 | 306 | 1 | 70.4% |
+
+Two consequences, both properties of the benchmark rather than of any method
+here, and both faced equally by every arm including PACT-1:
+
+1. **Almost every traveller is alone on its OD pair.** Anything defined on the
+   same-OD set is a singleton.
+2. **URB's observation is `[start_time, 0, 0, 0, 0]` for ~97% of travellers on
+   every day of the run** on all networks but `ingolstadt_custom`, because the
+   four count coordinates tally *earlier same-OD* travellers. The observation is
+   effectively a constant agent identifier, which makes URB on these cities a
+   repeated **contextless** bandit for every learner.
+
+Three defaults follow, each recorded in the relevant checklist:
+
+| arm | was | is | why |
+|---|---|---|---|
+| MF-Q | `field_scope: od` | `field_scope: all` | a same-OD "mean field" is one traveller's own one-hot action ([FIELD-1](CHECKLIST_mfq.md)) |
+| LIAM | `graph: od` | `graph: overlap` | a same-OD modelled set is almost all padding, so the decoder reconstructs what the encoder already has ([ADAPT-1](CHECKLIST_liam.md)) |
+| ERNIE | `scale_floor: 0.0` | `scale_floor: 1.0` | relative scaling leaves an exactly-zero coordinate unperturbed, i.e. four of five here ([ADAPT-1](CHECKLIST_ernie.md)) |
+
+A fourth consequence is a **finding rather than a fix**: DGN's temporal relation
+regulariser compares the attention at day *t* and *t+1*, and on a city where the
+node features are constant those two are the same, so the KL is ~0 by
+construction. `att_spread` and `reg` are printed so this is visible; on
+`ingolstadt_custom` it is live. Report it, do not patch it.
+
 ---
 
 ## 5. How to verify the work
@@ -171,7 +264,16 @@ the degenerate behaviour can be reproduced.
    - *drive* gates run every arm for a few hundred days on a 100-line numpy
      stand-in with URB's observation shape, URB's sequential single-step day and
      URB's reward scale, and check it runs, learns, writes loss rows and keeps
-     its own invariants.
+     its own invariants;
+   - *config* gates check the two things a hand-edited config can silently break:
+     **CFG-1**, that every arm's host block is character-identical to
+     `ippo/config1.json` or `iql/config1.json` (rule R2 — an arm difference is
+     never a tuning difference), and **CFG-2**, that every arm actually
+     constructs and acts under its **own shipped** `config1.json`. CFG-2 exists
+     because a config and its code can drift apart — a config naming a graph the
+     code could not build once raised after the 200-day human-learning phase,
+     seventeen minutes into a run — and no other gate here would see it, since
+     the drive gates use their own inline configs.
    A pass there is not a result; it is the absence of a class of bug.
 3. **Read a run's banner.** Every arm prints exactly what it was configured
    with, in the terms of its own paper, before it does anything.

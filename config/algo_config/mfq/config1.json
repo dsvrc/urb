@@ -13,7 +13,17 @@
         "  exploration = epsilon  the host schedule. The paper's Boltzmann",
         "      temperature is in the units of ITS rewards, and URB pays -1000; set",
         "      exploration = boltzmann with a temperature on the scale of the Q",
-        "      differences to run the paper's rule instead."
+        "      differences to run the paper's rule instead.",
+        "",
+        "MEASURED PROPERTY OF URB'S SHIPPED NETWORKS, 2026-09-19: the median",
+        "origin-destination pair carries exactly ONE traveller on all seven of them",
+        "(agents/ODs = 222/215, 636/629, 362/352, 729/724, 523/517, 1035/306), and",
+        "only 0.7-3.2% of travellers ever have an EARLIER same-OD peer -- except on",
+        "ingolstadt_custom, where it is 70%. So on saint_arnoult the observation's",
+        "four count coordinates are zero for 97% of travellers on every day of the",
+        "run. Three defaults below follow from that; see the checklist item named.",
+        "  field_scope = all (NOT od): a same-OD 'mean field' would be one",
+        "      traveller's own one-hot action. See CHECKLIST_mfq.md FIELD-1."
     ],
     "training_eps": 4000,
     "eps_init": 1.0,
@@ -30,7 +40,7 @@
     ],
     "update_every": 1,
     "mfq": {
-        "field_scope": "od",
+        "field_scope": "all",
         "mf_hidden": 64,
         "mf_embed": 32,
         "exploration": "epsilon",

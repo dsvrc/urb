@@ -48,7 +48,7 @@ What it genuinely adds over the information-matched arm:
 | **MF-3** | `ā` is taken from the **previous** step | `senario_battle.play`: `former_act_prob` is formed *after* the actions and used on the next step | **IMPLEMENTED** | `self.abar` is written at the end of day `t` and read during day `t+1` |
 | **MF-4** | `ā` enters through its own embedding branch, `Linear(K, 64) → ReLU → Linear(64, 32)`, concatenated with the observation embedding | `algo/base.py`: `prob_emb_linear` | **IMPLEMENTED (verbatim)** | `MeanFieldQNet.prob_emb`, `mf_hidden: 64`, `mf_embed: 32` |
 | **MF-5** | `ā` is initialised before any data arrives | `senario_battle`: `former_act_prob` starts at zeros | **ADAPTED** | initialised **uniform** rather than zero: a zero vector is not a distribution, and a uniform one is the honest "I know nothing". One line, stated here. |
-| **NBR-1** | `N(j)` is the agent's neighbourhood | Eq. 8 | **ADAPTED** | default `field_scope: od` — every traveller on the same OD pair, humans included. See ADAPT-1. |
+| **NBR-1** | `N(j)` is the agent's neighbourhood | Eq. 8 | **ADAPTED** | default `field_scope: all` — the release's group-wide mean, because URB's OD pairs are singletons. See FIELD-1. |
 | **POL-1** | Boltzmann policy `π_j(a|s, ā) ∝ exp(Q_j(s,a,ā)/T)`, **sampled** | Eq. 11; `main_MFQ_Ising.boltzman_explore` | **IMPLEMENTED, OFF BY DEFAULT** | `_MFDQN.act` with `exploration: "boltzmann"`. See ADAPT-2. |
 | **POL-2** | Decaying temperature, floored at a minimum | `main_MFQ_Ising`: `current_t *= decay_rate`, floored | **IMPLEMENTED** | `temperature`, `temperature_decay`, `temperature_min` |
 | **TGT-1** | `y = r + γ(1−done)·v^{MF}(s')` | Eq. 12 | **N/A** | A URB day is one step and terminates ⇒ `y = r`, as in URB's own IQL. |
@@ -64,25 +64,50 @@ What it genuinely adds over the information-matched arm:
 
 ## B. Adaptations, in full
 
-### FIELD-1 — the neighbourhood is the OD pair
-Averaging one-hot action vectors is only meaningful where the action index means
-the same thing for everybody. On URB, action `k` is *"the k-th route of my OD
-pair"*, so route 0 for OD A and route 0 for OD B are different roads and their
-one-hot mean is not a quantity.
+### FIELD-1 — the neighbourhood is the whole population, and the OD pair is a trap
+Averaging one-hot action vectors is only strictly meaningful where the action
+index means the same thing for everybody. On URB, action `k` is *"the k-th route
+of my OD pair"*, so route 0 for OD A and route 0 for OD B are different roads and
+their one-hot mean is not a quantity. That argues for the OD pair as the
+neighbourhood, and it was the first default here.
 
-The default `field_scope: od` is therefore every traveller on the same OD pair —
-the reading of "neighbourhood" that keeps `ā` well defined. Humans are included:
-a human on the same OD loads the same roads and is part of the field by any
-reading of the method, and `info.peer_acts` (RouteRL's own per-day file) is what
-makes them visible.
+**It is also moot, and the measurement is what settled it.** On every network URB
+ships, the median OD pair carries exactly **one** traveller:
 
-Two alternatives are selectable:
-- `field_scope: all` — the group-wide mean, which is literally what the MAgent
-  release computes (`np.mean(... , keepdims=True)` over the whole handle). On URB
-  it is a well-defined population statistic ("what fraction of everyone took
-  their k-th route") even though the index does not mean one road.
+| network | travellers | distinct OD pairs | median / OD | max / OD |
+|---|---|---|---|---|
+| saint_arnoult | 222 | 215 | 1 | 2 |
+| gretz_armainvilliers | 636 | 629 | 1 | 2 |
+| nangis | 362 | 352 | 1 | 2 |
+| nemours | 729 | 724 | 1 | 2 |
+| provins | 523 | 517 | 1 | 2 |
+| ingolstadt_custom(2) | 1035 | 306 | 1 | 85 |
+
+A same-OD "mean field" is therefore one traveller's own one-hot action from
+yesterday — not a mean field at all. The default is `field_scope: all`: the
+group-wide mean, which is literally what the MAgent release computes
+(`np.mean(..., keepdims=True)` over the whole handle) and which on URB is a
+well-defined population statistic ("what fraction of everyone took their k-th
+route"). It is a **weaker object than a per-road load**, and that weakness is
+part of what this arm measures — it should be reported as such rather than
+presented as a faithful neighbourhood mean.
+
+Humans are included either way: a human loads the same roads and is part of the
+field by any reading of the method, and `info.peer_acts` (RouteRL's own per-day
+file) is what makes them visible.
+
+Two alternatives remain selectable:
+- `field_scope: od` — kept for a city that populates its OD pairs;
+  `ingolstadt_custom` is the one that does. The arm prints a `[mfq][WARN]` when
+  the median neighbourhood has two travellers or fewer, so choosing it on the
+  wrong city cannot pass silently.
 - `field_scope: graph` — the `|B| = 3` neighbourhood of `urb_baselines/graph.py`;
   DGN's Table 4 lists 3 neighbours for MFQ as well.
+
+Under `all` every agent's field is the same set, so the mean is computed **once**
+per day rather than per agent. Per-agent means would be O(machines × travellers)
+— 428k dictionary lookups a day on `ingolstadt_custom`, 1.7 × 10⁹ over a full
+run — for a quantity that is identical for everybody.
 
 ### ADAPT-2 — exploration defaults to the host's ε-greedy
 The paper's policy is `softmax(Q/T)` with a decaying `T`. URB pays
@@ -115,7 +140,11 @@ printed alongside so it can be checked.
   the uniform distribution and the arm is IQL with four constant inputs. `close()`
   prints a `***` block.
 - `abar_dev` — `‖ā − uniform‖₁`, averaged over agents. Exactly zero ⇒ the
-  mean-field input carries no signal; check `field_scope`.
+  mean-field input carries no signal; check `field_scope`. Note the **opposite**
+  failure is also possible and looks healthy: a value near 1.5 under
+  `field_scope: od` means `ā` is a single one-hot (one traveller), which is a
+  large deviation from uniform and still not a mean field. The startup
+  `[mfq][WARN]` is what catches that case.
 - `T` — only when `exploration: boltzmann`; compare it with the spread of Q.
 
 **Prediction under test** (BASELINES.md B4): the coupling on URB *is* a weighted

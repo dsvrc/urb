@@ -104,7 +104,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from urb_baselines.graph import NeighbourGraph
+from urb_baselines.graph import build_from_ctx
 from urb_baselines.host import BaselineAlgorithm
 from urb_baselines.nets import MLP
 
@@ -198,22 +198,10 @@ class DGN(BaselineAlgorithm):
         self.reg_lambda = 0.0 if arm == "dgn_r" else float(cfg["reg_lambda"])
 
         # ---- the graph ------------------------------------------------
-        routes = None
-        durations = None
-        mode = str(cfg["graph"])
-        if mode == "overlap":
-            routes, durations = self._load_routes(ctx)
-            if routes is None:
-                print("[dgn][WARN] graph='overlap' needs the route table and none "
-                      "was found; falling back to 'copresence'. Pass --routes to "
-                      "use the coupling graph.", flush=True)
-                mode = "copresence"
-        if durations is None:
-            durations = self._durations_from_freeflow(ctx)
-        self.graph = NeighbourGraph(
-            ctx.agent_table, self.av_ids, mode=mode,
-            n_neighbors=int(cfg["n_neighbors"]), routes_by_od=routes,
-            durations=durations, slack=float(cfg.get("slack", 0.0)))
+        self.graph = build_from_ctx(
+            ctx, mode=str(cfg["graph"]), n_neighbors=int(cfg["n_neighbors"]),
+            slack=float(cfg.get("slack", 0.0)), tag="dgn")
+        mode = self.graph.mode
         self.adj = torch.as_tensor(self.graph.adj, dtype=torch.long,
                                    device=self.device)
         self.mask = torch.as_tensor(self.graph.mask, dtype=torch.bool,
@@ -244,6 +232,13 @@ class DGN(BaselineAlgorithm):
         self.prev_obs = None            # day t-1's acting observations
         self._today = np.zeros((self.n_av, self.obs_size), dtype=np.float32)
         self._seen = np.zeros(self.n_av, dtype=bool)
+        # The per-day arrays are (re)built by begin_episode, but they are
+        # allocated here too so that a hook the caller forgot is a no-op rather
+        # than an AttributeError deep inside act(). Selftest gate CFG-2 is what
+        # noticed.
+        self._acts = np.zeros(self.n_av, dtype=np.int64)
+        self._rews = np.zeros(self.n_av, dtype=np.float32)
+        self._rew_seen = np.zeros(self.n_av, dtype=bool)
         self.loss = []
         self.last = {"q": 0.0, "reg": 0.0, "att_spread": 0.0}
 

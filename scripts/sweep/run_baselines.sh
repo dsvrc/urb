@@ -22,10 +22,25 @@
 #   ARMS=1             also run each baseline's declared ablation arms
 #   ONLY="lcpo_0 eso_0"    run only these slugs
 #   SKIP="dgn_0"           exclude these slugs
+#   DEVICE=cpu|cuda|cuda:N|auto   where the networks run (default auto)
 #   SELFTEST=0         skip the offline gate run (NOT recommended)
 #   DRYRUN=1           print the commands, run nothing
 # ---------------------------------------------------------------------------
 set -uo pipefail        # deliberately NOT -e: one failed arm must not kill the run
+
+# ...but an INTERRUPTION must. Without this the loop keeps launching arms after
+# a Ctrl-C or a SIGTERM, each one is killed the instant it starts, and the
+# summary reports eight "failures" that were really one interruption. Observed
+# exactly that; see also the rc 130/143 check in run().
+INTERRUPTED=0
+on_signal () {
+    INTERRUPTED=1
+    echo
+    echo "*** interrupted (signal) -- stopping the sweep. Completed arms keep"
+    echo "*** their .done markers, so re-running resumes from here."
+    exit 130
+}
+trap on_signal INT TERM
 
 : "${SIGMA:?SIGMA must be set by a wrapper (run_baselines_sigma0.sh / _sigma3.sh)}"
 
@@ -44,6 +59,18 @@ DRYRUN="${DRYRUN:-0}"
 ONLY="${ONLY:-}"
 SKIP="${SKIP:-}"
 SELFTEST="${SELFTEST:-1}"
+DEVICE="${DEVICE:-auto}"
+
+# DEVICE=cpu is enforced the blunt way as well as the polite way. The polite way
+# is --device, which only this package's scripts understand. The blunt way hides
+# the GPU from CUDA entirely, which ALSO fixes scripts/pact1.py, scripts/ippo.py
+# and every other stock URB script -- all of them choose the device with the
+# same `torch.device(0) if torch.cuda.is_available()` line and would otherwise
+# crash on a GPU this torch build has no kernels for.
+if [[ "$DEVICE" == "cpu" ]]; then
+    export CUDA_VISIBLE_DEVICES=""
+    echo "[runner] DEVICE=cpu -> CUDA_VISIBLE_DEVICES='' (applies to every script)"
+fi
 
 # Dial parameters -- ns_launch.py's own defaults, passed explicitly so that
 # every run's log documents the dial it actually ran under.
@@ -161,6 +188,9 @@ wanted () {
 run () {                        # run <slug> <target.py> [extra target args...]
     local slug="$1"; shift
     local script="$1"; shift
+    # Once something has killed a run, every later call returns without
+    # launching anything, so the loop below needs no change at its call sites.
+    [[ "$INTERRUPTED" == "1" ]] && return 1
     wanted "$slug" || return 0
 
     local id="${TAG}_${slug}"
@@ -176,7 +206,8 @@ run () {                        # run <slug> <target.py> [extra target args...]
         --period "$PERIOD" --wet-frac "$WET_FRAC" --loss "$LOSS"
         --sat-flow "$SAT_FLOW" --av-behavior selfish
         -- "$script" --id "$id" --alg-conf "$ALG_CONF" --task-conf "$TASK_CONF"
-           --net "$NET" --env-seed "$ENV_SEED" --routes "$ROUTES" "$@" )
+           --net "$NET" --env-seed "$ENV_SEED" --routes "$ROUTES"
+           --device "$DEVICE" "$@" )
 
     if [[ "$DRYRUN" == "1" ]]; then printf '%q ' "${cmd[@]}"; echo; return 0; fi
 
@@ -185,6 +216,17 @@ run () {                        # run <slug> <target.py> [extra target args...]
     "${cmd[@]}" > "$log" 2>&1
     local rc=$?
     local mins=$(( (SECONDS - t0) / 60 ))
+
+    # 130 = SIGINT, 143 = SIGTERM. Neither is an algorithm failure: something
+    # killed the run. Marching on would launch every remaining arm into the same
+    # thing and report a list of failures that were one interruption.
+    if [[ $rc -eq 130 || $rc -eq 143 ]]; then
+        echo "ABORT  $id   killed by a signal (rc=$rc) after ${mins}m"
+        echo "       Stopping the sweep. No .done marker was written, so"
+        echo "       re-running this command retries this arm and the rest."
+        INTERRUPTED=1
+        return 1
+    fi
 
     if [[ $rc -ne 0 ]]; then
         echo "FAIL   $id   rc=$rc after ${mins}m"
@@ -257,6 +299,10 @@ done
 echo
 echo "==========================================================================="
 echo " baselines sigma=$SIGMA finished $(date -Iseconds 2>/dev/null || date)"
+if [[ "$INTERRUPTED" == "1" ]]; then
+echo "   *** INTERRUPTED: the remaining arms were not started. Completed arms"
+echo "   *** kept their .done markers; re-run the same command to resume."
+fi
 echo "   completed $DONE   skipped $SKIPPED   failed ${#FAILED[@]}"
 echo "   inert ${#INERT[@]}   degenerate ${#DEGENERATE[@]}"
 if [[ ${#FAILED[@]} -gt 0 ]]; then printf '   FAILED: %s\n' "${FAILED[*]}"; fi

@@ -251,7 +251,91 @@ def _base_parser(name):
                         "degenerate and every banner says so.")
     p.add_argument('--routes', type=str, default=None,
                    help="route table (routes.csv); found automatically if omitted")
+    p.add_argument('--device', type=str, default=None,
+                   help="auto (default) | cpu | cuda | cuda:N. 'auto' is URB's "
+                        "own rule -- CUDA if torch reports it available, else "
+                        "CPU -- but falls back to CPU if the device fails its "
+                        "startup probe. The $DEVICE / $URB_DEVICE environment "
+                        "variables are read when this flag is absent.")
     return p
+
+
+def _resolve_device(spec):
+    """Pick a torch device, then PROVE it can run a kernel before using it.
+
+    ``torch.cuda.is_available()`` only says a driver and a device are present.
+    It says nothing about whether this PyTorch build has kernels compiled for
+    that device's compute capability, and when it does not, the failure is
+    "CUDA error: no kernel image is available for execution on the device" --
+    raised at the FIRST forward pass, which on URB is 200 human-learning days
+    and seventeen minutes into the run. Measured exactly that on a real box.
+
+    So the device is probed here, before SUMO starts: one matmul, one backward,
+    one synchronize. Two seconds to convert a seventeen-minute crash into an
+    immediate message.
+
+    An EXPLICIT ``--device cuda`` that fails is fatal -- the caller asked for a
+    specific device and silently giving them another one would make the run
+    something they did not ask for. ``auto`` falls back to CPU and says so
+    loudly, because a slower arm beats a dead one.
+    """
+    raw = spec or os.environ.get("URB_DEVICE") or os.environ.get("DEVICE")
+    explicit = bool(raw) and str(raw).lower() != "auto"
+    raw = (str(raw).lower() if raw else "auto")
+
+    if raw not in ("", "auto", "cpu", "cuda") and not raw.startswith("cuda:"):
+        raise ValueError(f"[URB-BL] --device must be auto|cpu|cuda|cuda:N, "
+                         f"got {raw!r}")
+
+    def _pick():
+        if raw in ("", "auto"):
+            return (torch.device(0) if torch.cuda.is_available()
+                    else torch.device("cpu"))
+        if raw == "cpu":
+            return torch.device("cpu")
+        return torch.device(0) if raw == "cuda" else torch.device(raw)
+
+    dev = torch.device("cpu")
+    try:
+        # CONSTRUCTION is inside the try as well as the probe: on some builds
+        # `torch.device(0)` itself raises when no accelerator is usable, so a
+        # try that wrapped only the probe would let that escape unhandled.
+        dev = _pick()
+        x = torch.randn(8, 8, device=dev, requires_grad=True)
+        (x @ x).sum().backward()
+        if dev.type == "cuda":
+            torch.cuda.synchronize(dev)
+    except Exception as exc:                               # noqa: BLE001
+        msg = (f"[URB-BL] device {raw!r} failed its startup probe:\n"
+               f"        {type(exc).__name__}: {exc}\n")
+        if explicit:
+            raise RuntimeError(
+                msg + "        You asked for this device explicitly, so this is "
+                      "fatal rather than\n"
+                      "        silently switched. Re-run with --device cpu (or "
+                      "DEVICE=cpu) to use\n"
+                      "        the CPU, or install a torch build with kernels "
+                      "for this GPU.") from None
+        print("\n" + "=" * 74)
+        print(msg.rstrip())
+        print("  *** FALLING BACK TO CPU. torch reported CUDA as available, but")
+        print("  *** this build cannot launch a kernel on it -- usually a torch")
+        print("  *** wheel without kernels for this GPU's compute capability.")
+        print("  *** Every stock URB script (scripts/ippo.py, scripts/pact1.py,")
+        print("  *** ...) picks the device the same way and WILL crash here,")
+        print("  *** seventeen minutes in. Export CUDA_VISIBLE_DEVICES= to fix")
+        print("  *** the whole repository at once.")
+        print("=" * 74 + "\n", flush=True)
+        dev = torch.device("cpu")
+
+    if dev.type == "cuda":
+        try:
+            name = torch.cuda.get_device_name(dev)
+            cap = ".".join(str(c) for c in torch.cuda.get_device_capability(dev))
+            print(f"[URB-BL] device probe OK: {dev} ({name}, sm_{cap})", flush=True)
+        except Exception:                                  # noqa: BLE001
+            print(f"[URB-BL] device probe OK: {dev}", flush=True)
+    return dev
 
 
 def _find_routes_csv(explicit, records_folder, network, repo_root):
@@ -326,7 +410,10 @@ def main(name, algo_cls, extra_args=None, description=None):
     random.seed(env_seed)
     np.random.seed(env_seed)
 
-    device = torch.device(0) if torch.cuda.is_available() else torch.device("cpu")
+    # Probed, not assumed -- see _resolve_device. This happens BEFORE the
+    # environment is built, so a dead device costs two seconds rather than the
+    # whole human-learning phase.
+    device = _resolve_device(args.device)
     print("Device is: ", device)
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

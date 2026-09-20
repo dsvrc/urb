@@ -31,15 +31,27 @@ network takes the mean action through its own embedding branch
 (``prob_emb_linear`` in the release: ``Linear(K,64) -> ReLU -> Linear(64,32)``),
 concatenated with the observation embedding.
 
-WHY THE NEIGHBOURHOOD IS THE OD PAIR BY DEFAULT
+WHY THE NEIGHBOURHOOD IS THE WHOLE POPULATION, NOT THE OD PAIR
 --------------------------------------------------------------------------------
-Averaging one-hot action vectors is only meaningful where the action index means
-the same thing for everybody. On URB action ``k`` is "the k-th route OF MY OD
-PAIR", so route 0 for OD A and route 0 for OD B are different roads and their
-one-hot mean is not a quantity. The default neighbourhood is therefore the OD
-pair (every traveller on it, humans included). ``field_scope: all`` reproduces
-the release's group-wide mean and ``field_scope: graph`` uses the |B| = 3
-neighbourhood of ``urb_baselines/graph.py`` -- DGN's Table 4 lists 3 for MFQ.
+Averaging one-hot action vectors is only strictly meaningful where the action
+index means the same thing for everybody. On URB action ``k`` is "the k-th route
+OF MY OD PAIR", so route 0 for OD A and route 0 for OD B are different roads,
+which argues for the OD pair as the neighbourhood.
+
+That argument is sound and it is also moot: **on every URB network shipped with
+the benchmark the median OD pair carries exactly ONE traveller.** Measured over
+the seven of them, ``agents / distinct OD pairs`` is 222/215, 636/629, 362/352,
+729/724, 523/517 and 1035/306 -- so a same-OD mean action is the agent's own
+one-hot from yesterday and is not a mean field at all.
+
+The default is therefore ``field_scope: all``: the group-wide mean, which is
+literally what the MAgent release computes and which on URB is a well-defined
+population statistic ("what fraction of everyone took their k-th route"). It is
+a weaker object than a per-road load, and that weakness is part of what this
+arm measures. ``field_scope: od`` is kept for a city that populates its OD pairs
+(``ingolstadt_custom`` is the one that does), and ``field_scope: graph`` uses
+the |B| = 3 neighbourhood of ``urb_baselines/graph.py`` -- DGN's Table 4 lists 3
+for MFQ as well.
 
 TWO THINGS URB REMOVES, AND THEY ARE THE HOST'S DOING
 --------------------------------------------------------------------------------
@@ -64,7 +76,7 @@ import torch
 import torch.nn as nn
 
 from urb_baselines.algos.reference import PerAgentDQNAlgorithm, SingleStepDQN
-from urb_baselines.graph import NeighbourGraph
+from urb_baselines.graph import build_from_ctx
 from urb_baselines.nets import MLP
 
 __all__ = ["MFQ", "MeanFieldQNet", "add_args"]
@@ -140,7 +152,7 @@ class MFQ(PerAgentDQNAlgorithm):
     def __init__(self, ctx):
         cfg = dict(ctx.algo_cfg)
         self.scope = str(getattr(ctx.args, "field_scope", None)
-                         or cfg.get("field_scope", "od")).lower()
+                         or cfg.get("field_scope", "all")).lower()
         if self.scope not in self.SCOPES:
             raise ValueError(f"[mfq] field_scope must be one of {self.SCOPES}")
         self.mf_hidden = int(cfg.get("mf_hidden", 64))
@@ -153,9 +165,10 @@ class MFQ(PerAgentDQNAlgorithm):
 
         self.graph = None
         if self.scope == "graph":
-            self.graph = NeighbourGraph(
-                ctx.agent_table, self.av_ids, mode=str(cfg.get("graph", "od")),
-                n_neighbors=int(cfg.get("n_neighbors", 3)), verbose=False)
+            self.graph = build_from_ctx(
+                ctx, mode=str(cfg.get("graph", "overlap")),
+                n_neighbors=int(cfg.get("n_neighbors", 3)), tag="mfq",
+                verbose=False)
 
         # which travellers are in each agent's field, resolved once
         self.field = {}
@@ -200,6 +213,15 @@ class MFQ(PerAgentDQNAlgorithm):
                   "order -1000, so a temperature transplanted from the paper's "
                   "O(1) rewards gives either a uniform or a degenerate policy. "
                   "Check the 'T' diagnostic against the spread of Q.", flush=True)
+        if float(np.median(sizes)) <= 2.0:
+            # A "mean field" over one or two travellers is one traveller's
+            # one-hot action. Cheap to detect, and it decides whether this row
+            # can be reported as mean-field RL at all.
+            print(f"[mfq][WARN] the median neighbourhood under field_scope="
+                  f"'{self.scope}' has {np.median(sizes):.0f} traveller(s), so "
+                  f"abar is essentially one agent's own one-hot action rather "
+                  f"than a mean field. On this network use field_scope='all'.",
+                  flush=True)
 
     # ------------------------------------------------------------------ model
     def input_size(self):
@@ -228,19 +250,34 @@ class MFQ(PerAgentDQNAlgorithm):
         acts = info.peer_acts or info.actions
         if not acts:
             return
-        onehot = {}
+        counts = {}
         for a, k in acts.items():
             k = int(k)
             if 0 <= k < self.n_actions:
-                v = np.zeros(self.n_actions, dtype=np.float32)
-                v[k] = 1.0
-                onehot[a] = v
-        if not onehot:
+                counts[a] = k
+        if not counts:
             return
-        for a in self.av_ids:
-            vs = [onehot[p] for p in self.field[a] if p in onehot]
-            if vs:
-                self.abar[a] = np.mean(vs, axis=0).astype(np.float32)
+        if self.scope == "all":
+            # Every agent's field is the SAME set, so the mean is computed once.
+            # Per-agent means here would be O(machines x travellers) per day --
+            # 428k lookups a day on ingolstadt_custom, 1.7e9 over a full run.
+            hist = np.zeros(self.n_actions, dtype=np.float64)
+            for k in counts.values():
+                hist[k] += 1.0
+            mean = (hist / hist.sum()).astype(np.float32)
+            for a in self.av_ids:
+                self.abar[a] = mean
+        else:
+            for a in self.av_ids:
+                hist = np.zeros(self.n_actions, dtype=np.float64)
+                n = 0
+                for p in self.field[a]:
+                    k = counts.get(p)
+                    if k is not None:
+                        hist[k] += 1.0
+                        n += 1
+                if n:
+                    self.abar[a] = (hist / n).astype(np.float32)
         self.n_field_updates += 1
 
     def diagnostics(self):

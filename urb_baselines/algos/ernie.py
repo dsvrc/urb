@@ -77,7 +77,13 @@ class ErniePPO(SingleStepPPO):
         self.alpha = float(e.get("alpha", 0.0)) or self.eps
         self.steps = int(e.get("perturb_steps", 1))
         self.relative = bool(e.get("relative", True))
-        self.scale_floor = float(e.get("scale_floor", 0.0))
+        # NOT the released 0.0. URB's observation is [start_time, four counts of
+        # earlier same-OD travellers], and measured over the seven networks URB
+        # ships, 97% of travellers NEVER have an earlier same-OD peer -- so four
+        # of the five coordinates are exactly zero, and a purely relative
+        # perturbation would leave them untouched and attack the departure time
+        # alone. The floor is one traveller, the natural quantum of a count.
+        self.scale_floor = float(e.get("scale_floor", 1.0))
         self.init_std = float(e.get("init_std", 1e-3))
         self.mode = str(e.get("mode", "ernie"))     # ernie | ernie_no_st | gaussian
         self.last_reg = 0.0
@@ -97,13 +103,14 @@ class ErniePPO(SingleStepPPO):
     def _project(self, delta, scale):
         """Project into the l_2 ball of radius eps, in units of ``scale``.
 
-        Appendix F: "we use the l_2 norm to bound the attacks delta". ``scale`` is
-        the released code's ``torch.abs(obs)`` relative scaling -- URB's
+        Appendix F: "we use the l_2 norm to bound the attacks delta". ``scale``
+        is the released code's ``torch.abs(obs)`` relative scaling -- URB's
         observation mixes a start time in seconds with small route counts, so an
         absolute epsilon would mean two completely different things in the two
-        blocks. A coordinate that is exactly zero therefore receives no
-        perturbation; that is the released behaviour, and ``relative: false``
-        switches to absolute units.
+        blocks -- floored at ``scale_floor`` so a coordinate that is exactly zero
+        is still perturbed. See ``__init__`` for why that floor is not optional
+        here. ``relative: false`` switches to absolute units, and
+        ``scale_floor: 0.0`` restores the released behaviour exactly.
         """
         u = delta / scale
         n = u.flatten(1).norm(dim=1).clamp_min(1e-12).view(-1, 1)

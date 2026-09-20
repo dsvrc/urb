@@ -49,6 +49,22 @@ from urb_baselines.records import split_records         # noqa: E402
 
 RESULTS = []
 
+#: slug -> (module under urb_baselines.algos, class name)
+_ARM_CLASS = {
+    "lcpo": ("lcpo", "LCPO"),
+    "happo": ("happo", "HAPPO"),
+    "ernie": ("ernie", "ERNIE"),
+    "rippo": ("rippo", "RecurrentIPPO"),
+    "rma": ("rma", "RMA"),
+    "liam": ("liam", "LIAM"),
+    "oracle_ippo": ("oracle_ippo", "OracleDriverIPPO"),
+    "dr_ippo": ("dr_ippo", "DomainRandomisedIPPO"),
+    "dgn": ("dgn", "DGN"),
+    "mfq": ("mfq", "MFQ"),
+    "eso": ("eso", "ESO"),
+    "urls": ("urls", "UnstructuredRLS"),
+}
+
 
 class Skip(Exception):
     """Raised by a gate that cannot run here -- reported, never counted as a
@@ -327,6 +343,157 @@ def g_domain_random():
     return f"200 draws in ({d.min():.3f}, {d.max():.3f}); fix() detaches"
 
 
+ON_POLICY_ARMS = ("lcpo", "happo", "ernie", "rippo", "rma", "liam",
+                  "oracle_ippo", "dr_ippo")
+OFF_POLICY_ARMS = ("dgn", "mfq")
+COMPENSATOR_ARMS = ("eso", "urls")          # non-learning; iql host block
+ALL_ARMS = ON_POLICY_ARMS + OFF_POLICY_ARMS + COMPENSATOR_ARMS
+
+
+def _repo():
+    return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        ".."))
+
+
+def g_config_host_block():
+    """CFG-1: every arm's HOST hyperparameters are the shared ones, verbatim.
+
+    Rule R2: a difference between two arms must never be a tuning difference.
+    The only way to keep that true is to check it, because a config is edited by
+    hand and nothing else would notice a drifted learning rate.
+    """
+    import json
+    root = os.path.join(_repo(), "config", "algo_config")
+
+    def block(slug):
+        p = os.path.join(root, slug, "config1.json")
+        if not os.path.exists(p):
+            raise Skip(f"{p} not found")
+        d = json.load(io.open(p, encoding="utf-8"))
+        return d, {k: v for k, v in d.items() if k not in ("desc", slug)}
+
+    _, on_ref = block("ippo")
+    _, off_ref = block("iql")
+    bad = []
+    for slug in ALL_ARMS:
+        d, host = block(slug)
+        if slug not in d:
+            bad.append(f"{slug}: no '{slug}' block")
+            continue
+        ref = on_ref if slug in ON_POLICY_ARMS else off_ref
+        which = "ippo" if slug in ON_POLICY_ARMS else "iql"
+        if host != ref:
+            diff = {k: (host.get(k), ref.get(k))
+                    for k in set(host) | set(ref) if host.get(k) != ref.get(k)}
+            bad.append(f"{slug}: host block differs from {which}/config1.json: "
+                       f"{diff}")
+    assert not bad, "\n".join(bad)
+    return (f"{len(ALL_ARMS)} arms: host block identical to ippo/config1.json "
+            f"or iql/config1.json")
+
+
+def g_config_constructs():
+    """CFG-2: every arm CONSTRUCTS under its own shipped config.
+
+    This is the gate that would have caught the state this repository was in on
+    2026-09-20: ``liam/config1.json`` said ``graph: overlap`` while
+    ``liam.py`` still built the graph without a route table, so LIAM raised
+    ValueError -- after the 200-day human-learning phase, seventeen minutes into
+    a run. A config and its code drifting apart is invisible to every other gate
+    here, because the drive gates use their own inline config.
+    """
+    import json
+    root = os.path.join(_repo(), "config", "algo_config")
+    built = []
+    for slug in ALL_ARMS:
+        p = os.path.join(root, slug, "config1.json")
+        if not os.path.exists(p):
+            raise Skip(f"{p} not found")
+        d = json.load(io.open(p, encoding="utf-8"))
+        host = {k: v for k, v in d.items() if k not in ("desc", slug)}
+        mod_name, cls_name = _ARM_CLASS[slug]
+        mod = __import__("urb_baselines.algos." + mod_name, fromlist=[cls_name])
+        cls = getattr(mod, cls_name)
+        torch.manual_seed(0)
+        np.random.seed(0)
+        # 4 OD pairs over 24 travellers, i.e. NOT URB's singleton structure --
+        # the point here is that the shipped config builds, not what it measures.
+        env = FakeURB(n_agents=24, n_machines=12, n_od=4, n_paths=4, seed=1)
+        host = dict(host)
+        host["training_eps"] = 60
+        ctx = make_ctx(env, algo_cfg=d[slug], params=host,
+                       with_context=cls.needs_context)
+        with contextlib.redirect_stdout(io.StringIO()):
+            algo = cls(ctx)
+            # Exercised in the host's own order: begin_episode, then act.
+            algo.begin_episode(0, "train")
+            algo.act(env.av_ids[0], env.observe(0, np.zeros(24, dtype=np.int64),
+                                                np.zeros(24, dtype=bool)))
+        built.append(slug)
+    return f"{len(built)} arms construct and act under their shipped config1.json"
+
+
+def g_device():
+    """DEV-1: the device is honoured from flag/env AND proved before use.
+
+    The failure this prevents: ``torch.cuda.is_available()`` is True, the torch
+    build has no kernels for the GPU, and the crash arrives at the first forward
+    pass -- 200 human-learning days and seventeen minutes into the run. Observed
+    on a real box. An explicit device that fails must be fatal; ``auto`` must
+    fall back to CPU rather than take the run down.
+    """
+    from urb_baselines.host import _resolve_device
+    saved = {k: os.environ.get(k) for k in ("DEVICE", "URB_DEVICE")}
+    for k in saved:
+        os.environ.pop(k, None)
+    try:
+        assert _resolve_device("cpu").type == "cpu"
+        os.environ["DEVICE"] = "cpu"
+        assert _resolve_device(None).type == "cpu", "$DEVICE was ignored"
+        os.environ.pop("DEVICE")
+        os.environ["URB_DEVICE"] = "cpu"
+        assert _resolve_device(None).type == "cpu", "$URB_DEVICE was ignored"
+        os.environ.pop("URB_DEVICE")
+        try:
+            _resolve_device("banana")
+            raise AssertionError("a bad device spec was accepted")
+        except ValueError:
+            pass
+
+        # a GPU whose kernels are missing, both branches
+        real_randn, real_avail = torch.randn, torch.cuda.is_available
+
+        def broken(*a, **kw):
+            d = kw.get("device")
+            if d is not None and torch.device(d).type == "cuda":
+                raise RuntimeError("CUDA error: no kernel image is available "
+                                   "for execution on the device")
+            return real_randn(*a, **kw)
+
+        torch.randn, torch.cuda.is_available = broken, (lambda: True)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert _resolve_device("auto").type == "cpu", \
+                    "auto did not fall back to CPU on a broken device"
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    _resolve_device("cuda")
+                raise AssertionError("an explicit broken --device cuda was "
+                                     "silently swapped for something else")
+            except RuntimeError:
+                pass
+        finally:
+            torch.randn, torch.cuda.is_available = real_randn, real_avail
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return ("flag and $DEVICE/$URB_DEVICE honoured; auto falls back to CPU on a "
+            "dead device, explicit cuda is fatal")
+
+
 def g_records():
     """REC-1: the record splitter keeps humans in peer_acts, machines in
     av_records, and never silently drops a malformed row."""
@@ -520,6 +687,9 @@ def main():
         ("dgn ring buffer (DGN-2)", g_dgn_ring_buffer),
         ("neighbour graph (GRAPH-1)", g_graph_static),
         ("domain randomisation (DR-1)", g_domain_random),
+        ("device resolution (DEV-1)", g_device),
+        ("config host block (CFG-1)", g_config_host_block),
+        ("config constructs (CFG-2)", g_config_constructs),
         ("record splitting (REC-1)", g_records),
     ]
     print("=" * 78)

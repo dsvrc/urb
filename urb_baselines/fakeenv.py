@@ -57,6 +57,12 @@ class FakeURB(object):
 
         self.day = 0
         self.last_action = np.zeros(n_agents, dtype=np.int64)
+        # The minimum of the NS severity wrapper's surface, so the arms that
+        # attach to it (dr_ippo) can be constructed here. `reset` exists for the
+        # same reason: DomainRandomiser wraps it.
+        self._ns_sigma = float(sigma)
+        self._ns_layer = None
+        self._ns_day = 0
         self.agent_table = {
             self.ids[i]: {"od": self.od[i], "start": float(self.start[i]),
                           "machine": bool(self.machine[i])}
@@ -71,6 +77,11 @@ class FakeURB(object):
         return float(np.sin(np.pi * min(ph / 0.5, 1.0)) ** 2) if ph < 0.5 else 0.0
 
     # ------------------------------------------------------------------ day
+    def reset(self, *a, **kw):
+        """RouteRL's per-day reset. Nothing to do here; it exists so that the
+        arms which WRAP reset (domain randomisation) can be exercised."""
+        return None
+
     def observe(self, slot, today_actions, acted):
         """URB's ``PreviousAgentStartPlusStartTime``: start time, then the routes
         taken so far TODAY by earlier travellers with the same OD."""

@@ -33,7 +33,7 @@ control)
 | **REG-4** | The regulariser is **per agent**, on that agent's own policy and observation | Appendix E.1–E.3: *"In practice we apply ERNIE to the individual policies"* | **IMPLEMENTED** | one `ErniePPO` per machine agent; the regulariser reads only that agent's minibatch |
 | **ATK-1** | The inner max is solved by projected gradient ascent on `δ` | §5.2 | **IMPLEMENTED** | the `for _ in range(self.steps)` loop |
 | **ATK-2** | `δ` is initialised from a small Gaussian (`1e-3`) | README; `qcombo.py` | **IMPLEMENTED (verbatim)** | `init_std = 1e-3` |
-| **ATK-3** | The ascent step is scaled by `|o|` (relative perturbation) | `qcombo.py`: `+ alpha * grad * torch.abs(old_global_obs)` | **IMPLEMENTED** | `scale = o.abs()`; see ADAPT-1 |
+| **ATK-3** | The ascent step is scaled by `|o|` (relative perturbation) | `qcombo.py`: `+ alpha * grad * torch.abs(old_global_obs)` | **ADAPTED** | `scale = o.abs().clamp_min(scale_floor)` with `scale_floor = 1.0`; on URB the unfloored form perturbs one coordinate of five. See ADAPT-1. |
 | **ATK-4** | `δ` is bounded in the **ℓ2** norm | Appendix F: *"we use the l_2 norm to bound the attacks δ"* | **IMPLEMENTED** | `_project` normalises `δ/scale` to radius ε in ℓ2 |
 | **ATK-5** | `perturb_num_steps = 1` | `config_qcombo_adv.py` | **IMPLEMENTED** | `perturb_steps: 1`; 3 and 5 also gated |
 | **ATK-6** | Stackelberg: `δ^K` is the K-fold composition of the ascent operator, and `∂R/∂θ` includes the leader–follower term | Eq. 6 and the gradient decomposition after it | **IMPLEMENTED** | `create_graph=True` when `mode == "ernie"`, so the attack is differentiated through. The paper notes this is equivalent to their Hessian-vector form. |
@@ -50,18 +50,36 @@ control)
 
 ## B. Adaptations, in full
 
-### ADAPT-1 — relative perturbation scaling, and the one consequence
+### ADAPT-1 — relative perturbation scaling, with a floor that is not optional here
 The released code perturbs by `alpha * grad * torch.abs(obs)`, i.e. each
 coordinate is perturbed in proportion to its own magnitude. URB needs this more
-than their traffic-grid does: its observation is
+than their traffic grid does: its observation is
 `[start_time_in_seconds, four route counts]`, mixing a quantity of order 1000
 with quantities of order 1. An absolute ε would be a rounding error on the first
 coordinate and an enormous perturbation on the others.
 
-The consequence, stated plainly: a coordinate that is **exactly zero receives no
-perturbation**. That is the released behaviour, not a choice made here.
-`relative: false` switches to absolute units for anyone who wants the other
-trade-off.
+The consequence of the released form, stated plainly: a coordinate that is
+**exactly zero receives no perturbation**. On URB that is not a corner case —
+**it is most of the observation**. The count coordinates tally *earlier same-OD*
+travellers, and measured over the seven networks URB ships, the fraction of
+travellers that ever have one is:
+
+| network | travellers with ≥1 earlier same-OD peer |
+|---|---|
+| saint_arnoult | 3.2% |
+| gretz_armainvilliers | 1.1% |
+| nangis | 2.8% |
+| nemours | 0.7% |
+| provins | 1.1% |
+| ingolstadt_custom(2) | 70.4% |
+
+So on every network except `ingolstadt_custom`, four of the five coordinates are
+zero for ~97% of travellers on every day of the run, and a purely relative attack
+would perturb the **departure time alone**. The default is therefore
+`scale_floor: 1.0` — one traveller, the natural quantum of a count — so the count
+coordinates are attacked in absolute units while the start time stays relative.
+`scale_floor: 0.0` restores the released behaviour exactly, and
+`relative: false` makes everything absolute.
 
 ### ADAPT-2 — ℓ2 ball in relative units
 Appendix F bounds `δ` in ℓ2; the released code scales by `|o|`. The two are

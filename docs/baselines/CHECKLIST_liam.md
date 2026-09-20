@@ -47,7 +47,7 @@ actions, which is exactly what a URB traveller has.
 | **GAE-1** | GAE with `gamma = 0.99`, `gae_lambda = 0.95` | `run_tests.py` | **N/A (collapses exactly)** | one-step terminal ⇒ `returns = r`, `adv = r − V(s)` |
 | **ENT-1** | `entropy_coef = 0.001` | `run_tests.py` | **ADAPTED** | URB's shared `entropy_coef` (0.01). R2: exploration pressure is a host hyperparameter and must match the arms this is compared to. |
 | **HID-1** | `hidden_dim1 = 128` | `run_tests.py` | **ADAPTED** | URB's shared width (64). R2. |
-| **MOD-1** | The modelled set is the other agents in the task (1–3 in MPE / LBF) | paper §4; `opp_obs_dim`, `opp_act_dim` | **ADAPTED** | the 3 nearest same-OD **machine** peers by departure time. See ADAPT-1. |
+| **MOD-1** | The modelled set is the other agents in the task (1–3 in MPE / LBF) | paper §4; `opp_obs_dim`, `opp_act_dim` | **ADAPTED** | the 3 nearest **machine** peers by departure time within the coupling graph (`graph: overlap`), NOT the same-OD set. See ADAPT-1. |
 | **SEQ-1** | The LSTM runs over the steps of an episode | `agent.act`, `storage` | **ADAPTED** | over **days**. Same decision, same reason, as `scripts/rippo.py`: a URB episode is one step, so a per-episode LSTM has nothing to encode. |
 
 ---
@@ -58,14 +58,24 @@ actions, which is exactly what a URB traveller has.
 LIAM models 1–3 other agents. URB has hundreds of travellers, and **only the
 machine agents have an observation at all** (human travellers in RouteRL have an
 action but no observation vector). The modelled set is therefore the `m` nearest
-same-OD machine peers by departure time, with `m = 3` — LIAM's largest setting.
+machine peers by departure time, with `m = 3` — LIAM's largest setting.
 Reconstructing all 87 peers would be a different method with a different name and
 a decoder two orders of magnitude larger than the policy.
 
-Where a city does not supply `m` same-OD machine peers, the slot is padded with
-the agent itself. A padded slot is a reconstruction target the encoder already
-knows, so it contributes almost no gradient — which is honest, and the banner
-reports how many slots were padded.
+**Nearest within which structure?** Not the OD pair. Measured on the seven
+networks URB ships, the median OD pair carries exactly **one** traveller (the
+table is in [CHECKLIST_mfq.md](CHECKLIST_mfq.md) FIELD-1), so a same-OD modelled
+set is almost entirely padding and the decoder ends up reconstructing the
+agent's own observation three times over — a target the encoder already has, and
+therefore no model of anyone. The default is `graph: overlap`: the coupling
+graph, where two travellers are neighbours when their OD pairs' route sets share
+a link **and** their trips are co-present. It needs the generated route table; if
+none is found it falls back to `copresence` and says so.
+
+Where a city still does not supply `m` peers, the slot is padded with the agent
+itself. The banner reports how many slots were padded, and `close()` prints a
+`***` block if more than half of them are — so "LIAM modelled nobody" cannot be
+mistaken for "agent modelling did not help".
 
 ### SCALE-1 — the reconstruction target is standardised, and without it the decoder learns three constants
 `DEC-2`'s loss is an unweighted squared error over the modelled agents'

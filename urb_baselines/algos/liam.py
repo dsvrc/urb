@@ -46,10 +46,18 @@ THREE THINGS URB DECIDES
    them -- the same decision, for the same reason, as ``algos/rippo.py``.
 2. **Who is modelled.** LIAM models 1-3 other agents in MPE and level-based
    foraging. URB has hundreds of travellers and only the machine agents have an
-   observation at all, so the modelled set is the ``m`` nearest machine peers on
-   the same OD pair by departure time (``m = 3`` by default, matching LIAM's
-   largest setting). Reconstructing all 87 peers would be a different method with
-   a different name.
+   observation at all, so the modelled set is the ``m`` nearest machine peers by
+   departure time within the COUPLING graph -- route sets that share a link and
+   trips that are co-present (``m = 3`` by default, matching LIAM's largest
+   setting). Reconstructing all 87 peers would be a different method with a
+   different name.
+
+   It is deliberately NOT the same-OD set: measured on the seven networks URB
+   ships, the median OD pair carries exactly ONE traveller, so a same-OD
+   modelled set is almost entirely padding and the decoder would be
+   reconstructing the agent's own observation three times over. The banner
+   prints how many slots ended up padded, so this is checkable per city rather
+   than assumed.
 3. **Reward scale.** URB pays -travel_time. LIAM standardises returns with a
    running mean/variance (``storage.compute_returns`` + ``standardise_stream.py``)
    and that is reproduced verbatim, because a value head starting near zero
@@ -69,7 +77,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from urb_baselines.graph import NeighbourGraph
+from urb_baselines.graph import build_from_ctx
 from urb_baselines.host import BaselineAlgorithm
 
 __all__ = ["LIAM", "add_args"]
@@ -299,15 +307,19 @@ class LIAM(BaselineAlgorithm):
         cfg.setdefault("max_grad_norm", 0.5)         # run_tests.py
         cfg.setdefault("n_modelled", 3)
         cfg.setdefault("backprop_embeddings", False)  # run_tests.py default
-        cfg.setdefault("graph", "od")
+        # NOT "od": on every URB network shipped with the benchmark the
+        # median OD pair has exactly ONE traveller, so the same-OD modelled
+        # set would be entirely padding and the decoder would be
+        # reconstructing the agent's own observation three times.
+        cfg.setdefault("graph", "overlap")
         if getattr(ctx.args, "n_modelled", None):
             cfg["n_modelled"] = int(ctx.args.n_modelled)
         self.cfg = cfg
 
         self.n_modelled = int(cfg["n_modelled"])
-        self.graph = NeighbourGraph(
-            ctx.agent_table, self.av_ids, mode=str(cfg["graph"]),
-            n_neighbors=self.n_modelled, verbose=False)
+        self.graph = build_from_ctx(ctx, mode=str(cfg["graph"]),
+                                    n_neighbors=self.n_modelled, tag="liam",
+                                    verbose=False)
         # the modelled set, padded with the agent itself when the city does not
         # supply enough same-OD machine peers. A padded slot is a reconstruction
         # target the encoder already knows, so it contributes almost no gradient
@@ -349,8 +361,9 @@ class LIAM(BaselineAlgorithm):
                                    else "flows into the policy (ablation)"),
             ("decoder", f"embedding -> {self.n_modelled} peers' observations "
                         f"(MSE) and actions (CE)"),
-            ("modelled set", f"{self.n_modelled} nearest same-OD machine peers "
-                             f"by departure time ({n_pad} padded slots)"),
+            ("modelled set", f"{self.n_modelled} nearest machine peers by "
+                             f"departure time in the '{self.graph.mode}' graph "
+                             f"({n_pad} padded slots)"),
             ("optimisers", f"actor-critic lr={hp['lr']}, encoder+decoder "
                            f"lr={cfg['encoder_lr']} (run_tests.py lr2)"),
             ("returns", "standardised by a running mean/var "
@@ -429,6 +442,16 @@ class LIAM(BaselineAlgorithm):
         print(f"  final obs reconstruction (0.5*SSE)   {ro:.4f}")
         print(f"  final action reconstruction (CE)     {ra:.4f}")
         print(f"  chance-level action CE               {np.log(self.n_actions):.4f}")
+        pad = sum(1 for a in self.av_ids
+                  for p in self.modelled[a] if p == a)
+        print(f"  padded modelled slots                {pad}/"
+              f"{len(self.av_ids) * self.n_modelled}")
+        if pad > 0.5 * len(self.av_ids) * self.n_modelled:
+            print("  *** More than half the modelled slots are the agent ITSELF:")
+            print("  *** this city does not supply enough peers under the chosen")
+            print("  *** graph, so the decoder is mostly reconstructing what the")
+            print("  *** encoder already has. Change `graph`, or report the arm")
+            print("  *** as modelling fewer than n_modelled peers.")
         if ra >= np.log(self.n_actions) - 1e-3:
             print("  *** The decoder never beat chance on the peers' actions, so")
             print("  *** the embedding carries no model of them and this arm is")
