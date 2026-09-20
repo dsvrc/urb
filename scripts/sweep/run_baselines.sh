@@ -18,8 +18,8 @@
 #
 # Overridable from the environment:
 #   NET ENV_SEED TORCH_SEEDS TASK_CONF ENV_CONF ALG_CONF ROUTES PY
-#   TIER=1|2|all       which set to run (default 1; see docs/baselines/README.md)
-#   ARMS=1             also run each baseline's declared ablation arms
+#   ARMS=1             ALSO run each baseline's own declared ablation arm
+#                      (off by default: the default is ONE run per baseline)
 #   ONLY="lcpo_0 eso_0"    run only these slugs
 #   SKIP="dgn_0"           exclude these slugs
 #   DEVICE=cpu|cuda|cuda:N|auto   where the networks run (default auto)
@@ -53,7 +53,9 @@ if [[ $# -gt 0 ]]; then TORCH_SEEDS="$*"; else TORCH_SEEDS="${TORCH_SEEDS:-0 1 2
 TASK_CONF="${TASK_CONF:-config1}"
 ENV_CONF="${ENV_CONF:-config1}"
 ALG_CONF="${ALG_CONF:-config1}"
-TIER="${TIER:-1}"
+# TIER is retained only so an old command line does not break; the default
+# list is now all twelve baselines, once each.
+TIER="${TIER:-all}"
 ARMS="${ARMS:-0}"
 DRYRUN="${DRYRUN:-0}"
 ONLY="${ONLY:-}"
@@ -131,7 +133,8 @@ fi
 echo "==========================================================================="
 echo " URB BASELINES   sigma=$SIGMA   net=$NET   env-seed=$ENV_SEED (FIXED)"
 echo " torch seeds : $TORCH_SEEDS"
-echo " tier        : $TIER      extra ablation arms: $ARMS"
+echo " arms        : 12 baselines, one run each"$([[ "$ARMS" == "1" ]] \
+    && echo "  + their ablation arms (ARMS=1)")
 echo " configs     : alg=$ALG_CONF task=$TASK_CONF env=$ENV_CONF"
 echo " route table : $ROUTES_ABS"
 echo " logs        : $LOGDIR"
@@ -259,30 +262,30 @@ run () {                        # run <slug> <target.py> [extra target args...]
 }
 
 # ---------------------------------------------------------------------------
-# TIER 1 -- the set docs/baselines/README.md calls the must-run column.
-# TIER 2 -- everything else in the package.
-# The ablation arms (ARMS=1) are each baseline's OWN declared ablation, not
-# extra methods: lcpo/a2c isolates the local constraint from the critic,
-# ernie/ernie_no_st is the paper's "w/o ST", dgn/dgn_r is the paper's "DGN-R",
-# rma/oa is RMA's literal history input.
+# THE DEFAULT IS ONE RUN PER BASELINE. Twelve baselines, twelve runs per seed,
+# each the method's own primary configuration -- nothing here is a second
+# version of something else above it.
+#
+# ARMS=1 adds each baseline's OWN declared ablation (lcpo/a2c isolates the local
+# constraint from the critic, ernie/ernie_no_st is the paper's "w/o ST",
+# dgn/dgn_r is the paper's "DGN-R", rma/oa is RMA's literal history input).
+# They are off by default because they answer "which PART of this method did the
+# work", which is a question for after the headline table exists.
 # ---------------------------------------------------------------------------
 for S in $TORCH_SEEDS; do
-    if [[ "$TIER" == "1" || "$TIER" == "all" ]]; then
-        run "lcpo_$S"        lcpo.py        --torch-seed "$S"
-        run "oracle_ippo_$S" oracle_ippo.py --torch-seed "$S"
-        run "dr_ippo_$S"     dr_ippo.py     --torch-seed "$S"
-        run "rippo_$S"       rippo.py       --torch-seed "$S"
-        run "eso_$S"         eso.py         --torch-seed "$S"
-        run "urls_$S"        urls.py        --torch-seed "$S"
-        run "dgn_$S"         dgn.py         --torch-seed "$S"
-        run "mfq_$S"         mfq.py         --torch-seed "$S"
-    fi
-    if [[ "$TIER" == "2" || "$TIER" == "all" ]]; then
-        run "happo_$S"       happo.py       --torch-seed "$S"
-        run "ernie_$S"       ernie.py       --torch-seed "$S"
-        run "rma_$S"         rma.py         --torch-seed "$S"
-        run "liam_$S"        liam.py        --torch-seed "$S"
-    fi
+    run "lcpo_$S"        lcpo.py        --torch-seed "$S"
+    run "happo_$S"       happo.py       --torch-seed "$S"
+    run "ernie_$S"       ernie.py       --torch-seed "$S"
+    run "rippo_$S"       rippo.py       --torch-seed "$S"
+    run "dgn_$S"         dgn.py         --torch-seed "$S"
+    run "mfq_$S"         mfq.py         --torch-seed "$S"
+    run "liam_$S"        liam.py        --torch-seed "$S"
+    run "rma_$S"         rma.py         --torch-seed "$S"
+    run "eso_$S"         eso.py         --torch-seed "$S"
+    run "urls_$S"        urls.py        --torch-seed "$S"
+    run "dr_ippo_$S"     dr_ippo.py     --torch-seed "$S"
+    run "oracle_ippo_$S" oracle_ippo.py --torch-seed "$S"
+
     if [[ "$ARMS" == "1" ]]; then
         run "lcpo_a2c_$S"    lcpo.py        --torch-seed "$S" --arm a2c
         run "lcppo_$S"       lcpo.py        --torch-seed "$S" --arm lcppo
@@ -291,7 +294,7 @@ for S in $TORCH_SEEDS; do
         run "dgn_r_$S"       dgn.py         --torch-seed "$S" --arm dgn_r
         run "eso2_$S"        eso.py         --torch-seed "$S" --arm eso2
         run "rma_oa_$S"      rma.py         --torch-seed "$S" --history-features oa
-        run "mfq_all_$S"     mfq.py         --torch-seed "$S" --field-scope all
+        run "mfq_all_$S"     mfq.py         --torch-seed "$S" --field-scope od
     fi
 done
 

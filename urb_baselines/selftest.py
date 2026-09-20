@@ -633,35 +633,43 @@ def _chk_liam(algo, diag):
     return f"rec_o {diag['rec_o']:.2f}, rec_a {diag['rec_a']:.2f}"
 
 
+# One drive gate per baseline, in its primary configuration. The ablation arms
+# are a separate list behind --arms: they are worth checking (a broken `--arm`
+# path would otherwise ship silently, since CFG-2 only exercises the shipped
+# config) but they double the output for a question nobody is asking during a
+# routine preflight.
 DRIVES = [
     ("drive ippo (reference)", "reference", "IPPOReference", None, None, None),
     ("drive iql  (reference)", "reference", "IQLReference", None, None, None),
     ("drive lcpo", "lcpo", "LCPO",
      {"master_batch": 8, "ood_subsample": 1, "value_lr": 0.01}, None, _chk_lcpo),
-    ("drive lcppo", "lcpo", "LCPO",
+    ("drive happo", "happo", "HAPPO", {"episode_length": 16}, None, _chk_happo),
+    ("drive ernie", "ernie", "ERNIE", None, None, None),
+    ("drive rippo", "rippo", "RecurrentIPPO", {"data_chunk_length": 4}, None,
+     None),
+    ("drive dgn", "dgn", "DGN", {"graph": "od"}, None, _chk_dgn),
+    ("drive mfq", "mfq", "MFQ", None, None, _chk_mfq),
+    ("drive liam", "liam", "LIAM", {"n_modelled": 3}, None, _chk_liam),
+    ("drive rma", "rma", "RMA", {"history_len": 8, "phase1_frac": 0.5}, None,
+     _chk_rma),
+    ("drive eso", "eso", "ESO", None, None, _chk_eso),
+    ("drive urls", "urls", "UnstructuredRLS", None, None, _chk_urls),
+    ("drive oracle_ippo", "oracle_ippo", "OracleDriverIPPO", None, None, None),
+]
+
+ARM_DRIVES = [
+    ("drive lcpo --arm lcppo", "lcpo", "LCPO",
      {"master_batch": 8, "ood_subsample": 1, "value_lr": 0.01},
      {"arm": "lcppo"}, _chk_lcpo),
     ("drive lcpo --arm a2c", "lcpo", "LCPO",
      {"master_batch": 8, "value_lr": 0.01}, {"arm": "a2c"}, None),
-    ("drive oracle_ippo", "oracle_ippo", "OracleDriverIPPO", None, None, None),
-    ("drive rippo", "rippo", "RecurrentIPPO", {"data_chunk_length": 4}, None,
-     None),
-    ("drive ernie", "ernie", "ERNIE", None, None, None),
     ("drive ernie --arm gaussian", "ernie", "ERNIE", None, {"arm": "gaussian"},
      None),
-    ("drive happo", "happo", "HAPPO", {"episode_length": 16}, None, _chk_happo),
-    ("drive eso --arm eso1", "eso", "ESO", None, None, _chk_eso),
-    ("drive eso --arm eso2", "eso", "ESO", None, {"arm": "eso2"}, _chk_eso),
-    ("drive urls", "urls", "UnstructuredRLS", None, None, _chk_urls),
-    ("drive mfq", "mfq", "MFQ", None, None, _chk_mfq),
-    ("drive mfq --field-scope all", "mfq", "MFQ", {"field_scope": "all"}, None,
-     _chk_mfq),
-    ("drive dgn", "dgn", "DGN", {"graph": "od"}, None, _chk_dgn),
     ("drive dgn --arm dgn_r", "dgn", "DGN", {"graph": "od"}, {"arm": "dgn_r"},
      _chk_dgn),
-    ("drive rma", "rma", "RMA", {"history_len": 8, "phase1_frac": 0.5}, None,
-     _chk_rma),
-    ("drive liam", "liam", "LIAM", {"n_modelled": 3}, None, _chk_liam),
+    ("drive eso --arm eso2", "eso", "ESO", None, {"arm": "eso2"}, _chk_eso),
+    ("drive mfq --field-scope od", "mfq", "MFQ", {"field_scope": "od"}, None,
+     _chk_mfq),
 ]
 
 
@@ -671,6 +679,9 @@ def main():
     ap.add_argument("--days", type=int, default=200)
     ap.add_argument("--only", nargs="*", default=None,
                     help="substrings; only gates whose name matches are run")
+    ap.add_argument("--arms", action="store_true",
+                    help="also drive each baseline's ablation arms (off by "
+                         "default: one gate per baseline)")
     args = ap.parse_args()
 
     def wanted(name):
@@ -704,10 +715,14 @@ def main():
 
     print()
     print("=" * 78)
+    drives = DRIVES + (ARM_DRIVES if args.arms else [])
     print(f"DRIVE GATES  ({args.days} days on fakeenv.FakeURB -- a wiring test, "
           f"not a benchmark)")
+    print(f"             one per baseline"
+          + ("; ablation arms included (--arms)" if args.arms
+             else "; --arms adds the ablation arms"))
     print("=" * 78)
-    for name, path, cls, cfg, kw, chk in DRIVES:
+    for name, path, cls, cfg, kw, chk in drives:
         if not wanted(name):
             continue
         gate(name, make_drive_gate(path, cls, cfg, kw, chk), args.days)
