@@ -60,6 +60,14 @@ Things that were deliberately NOT implemented are in §6, with reasons.
 bash scripts/sweep/run_baselines_sigma3.sh 0
 ```
 
+**One arm per baseline, and only one.** The sweep runs each method in its own
+primary configuration -- the one its checklist calls the method -- and nothing
+else. The `--arm` flags still exist on the individual scripts and each is
+covered by a selftest drive gate, so an ablation can be run by hand when a
+specific question needs it, but the sweep does not launch any. "Which PART of
+this method did the work" is a question for after the headline table exists, and
+at roughly three hours per arm it is not how the SUMO budget should be spent.
+
 One command. It runs the offline gates first (about a minute, no SUMO), then
 every baseline at torch seed 0 under σ = 3, through `ns_launch.py`, with
 the same pinned route table, the same task config and the same environment seed
@@ -67,7 +75,6 @@ the PACT-1 sweep uses. `run_baselines_sigma0.sh` is the identical command with
 the dial off, and is the no-severity row.
 
 ```bash
-TIER=all ARMS=1 bash scripts/sweep/run_baselines_sigma3.sh 0   # + Tier 2 + ablations
 ONLY="lcpo_0 eso_0"  bash scripts/sweep/run_baselines_sigma3.sh 0
 DEVICE=cpu           bash scripts/sweep/run_baselines_sigma3.sh 0   # force CPU
 DRYRUN=1             bash scripts/sweep/run_baselines_sigma3.sh 0   # print, run nothing

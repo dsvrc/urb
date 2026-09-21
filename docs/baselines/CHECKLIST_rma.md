@@ -107,7 +107,7 @@ mean/variance so the CNN's input is not dominated by a −1000-scale coordinate.
 
 `history_features: "oa"` drops the reward and reproduces RMA's literal input.
 **Run it as the ablation** — it is the arm that shows why the choice was made,
-and the runner's `ARMS=1` includes it as `rma_oa`.
+and it is available by hand as `scripts/rma.py --history-features oa`. The sweep runs one arm per baseline and does not launch it.
 
 ---
 

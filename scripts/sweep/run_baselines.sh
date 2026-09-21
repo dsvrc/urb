@@ -18,8 +18,6 @@
 #
 # Overridable from the environment:
 #   NET ENV_SEED TORCH_SEEDS TASK_CONF ENV_CONF ALG_CONF ROUTES PY
-#   ARMS=1             ALSO run each baseline's own declared ablation arm
-#                      (off by default: the default is ONE run per baseline)
 #   ONLY="lcpo_0 eso_0"    run only these slugs
 #   SKIP="dgn_0"           exclude these slugs
 #   DEVICE=cpu|cuda|cuda:N|auto   where the networks run (default auto)
@@ -56,7 +54,6 @@ ALG_CONF="${ALG_CONF:-config1}"
 # TIER is retained only so an old command line does not break; the default
 # list is now all twelve baselines, once each.
 TIER="${TIER:-all}"
-ARMS="${ARMS:-0}"
 DRYRUN="${DRYRUN:-0}"
 ONLY="${ONLY:-}"
 SKIP="${SKIP:-}"
@@ -133,8 +130,7 @@ fi
 echo "==========================================================================="
 echo " URB BASELINES   sigma=$SIGMA   net=$NET   env-seed=$ENV_SEED (FIXED)"
 echo " torch seeds : $TORCH_SEEDS"
-echo " arms        : 18 baselines, one run each"$([[ "$ARMS" == "1" ]] \
-    && echo "  + their ablation arms (ARMS=1)")
+echo " arms        : 18 baselines, ONE run each"
 echo " configs     : alg=$ALG_CONF task=$TASK_CONF env=$ENV_CONF"
 echo " route table : $ROUTES_ABS"
 echo " logs        : $LOGDIR"
@@ -276,15 +272,14 @@ run () {                        # run <slug> <target.py> [extra target args...]
 #     wisdom    B7/B8  learned predictive representation
 #     m3w       B12 model-based MARL      (the class had no arm anywhere)
 #
-# ARMS=1 adds each baseline's OWN declared ablation (lcpo/a2c isolates the local
-# constraint from the critic, ernie/ernie_no_st is the paper's "w/o ST",
-# dgn/dgn_r is the paper's "DGN-R", rma/oa is RMA's literal history input;
-# qcdr/rr and qcdr/master are the paper's own two controls, dfp/br removes the
-# averaging, pmpg/cont removes the deployment schedule, doraemon/fixed removes
-# the adaptation, wisdom/flat removes the decomposition, m3w/mlp removes the
-# mixture of experts and m3w/greedy removes MPPI).
-# They are off by default because they answer "which PART of this method did the
-# work", which is a question for after the headline table exists.
+# NO ABLATION ARMS. Each baseline contributes exactly one run: its own primary
+# configuration, the one its checklist calls the method. The `--arm` flags still
+# exist on the individual scripts (`scripts/dgn.py --arm dgn_r`, and so on) and
+# every one of them is covered by a selftest drive gate, so an ablation can be
+# run by hand when a specific question needs it -- but it is not part of the
+# sweep. "Which PART of this method did the work" is a question for after the
+# headline table exists, and answering it for eighteen arms at three hours each
+# is not how the SUMO budget should be spent.
 # ---------------------------------------------------------------------------
 for S in $TORCH_SEEDS; do
     run "lcpo_$S"        lcpo.py        --torch-seed "$S"
@@ -305,26 +300,6 @@ for S in $TORCH_SEEDS; do
     run "doraemon_$S"    doraemon.py    --torch-seed "$S"
     run "wisdom_$S"      wisdom.py      --torch-seed "$S"
     run "m3w_$S"         m3w.py         --torch-seed "$S"
-
-    if [[ "$ARMS" == "1" ]]; then
-        run "lcpo_a2c_$S"    lcpo.py        --torch-seed "$S" --arm a2c
-        run "lcppo_$S"       lcpo.py        --torch-seed "$S" --arm lcppo
-        run "ernie_nost_$S"  ernie.py       --torch-seed "$S" --arm ernie_no_st
-        run "ernie_gauss_$S" ernie.py       --torch-seed "$S" --arm gaussian
-        run "dgn_r_$S"       dgn.py         --torch-seed "$S" --arm dgn_r
-        run "eso2_$S"        eso.py         --torch-seed "$S" --arm eso2
-        run "rma_oa_$S"      rma.py         --torch-seed "$S" --history-features oa
-        run "mfq_all_$S"     mfq.py         --torch-seed "$S" --field-scope od
-        run "qcdr_rr_$S"     qcdr.py        --torch-seed "$S" --arm rr
-        run "qcdr_mas_$S"    qcdr.py        --torch-seed "$S" --arm master
-        run "dfp_br_$S"      dfp.py         --torch-seed "$S" --arm br
-        run "pmpg_ipga_$S"   pmpg.py        --torch-seed "$S" --arm ipga
-        run "pmpg_cont_$S"   pmpg.py        --torch-seed "$S" --arm cont
-        run "doraemon_fx_$S" doraemon.py    --torch-seed "$S" --arm fixed
-        run "wisdom_flat_$S" wisdom.py      --torch-seed "$S" --arm flat
-        run "m3w_mlp_$S"     m3w.py         --torch-seed "$S" --arm mlp
-        run "m3w_greedy_$S"  m3w.py         --torch-seed "$S" --arm greedy
-    fi
 done
 
 # ------------------------------------------------------------------ summary
