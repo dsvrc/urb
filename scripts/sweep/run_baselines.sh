@@ -133,7 +133,7 @@ fi
 echo "==========================================================================="
 echo " URB BASELINES   sigma=$SIGMA   net=$NET   env-seed=$ENV_SEED (FIXED)"
 echo " torch seeds : $TORCH_SEEDS"
-echo " arms        : 12 baselines, one run each"$([[ "$ARMS" == "1" ]] \
+echo " arms        : 18 baselines, one run each"$([[ "$ARMS" == "1" ]] \
     && echo "  + their ablation arms (ARMS=1)")
 echo " configs     : alg=$ALG_CONF task=$TASK_CONF env=$ENV_CONF"
 echo " route table : $ROUTES_ABS"
@@ -262,13 +262,27 @@ run () {                        # run <slug> <target.py> [extra target args...]
 }
 
 # ---------------------------------------------------------------------------
-# THE DEFAULT IS ONE RUN PER BASELINE. Twelve baselines, twelve runs per seed,
-# each the method's own primary configuration -- nothing here is a second
+# THE DEFAULT IS ONE RUN PER BASELINE. Eighteen baselines, eighteen runs per
+# seed, each the method's own primary configuration -- nothing here is a second
 # version of something else above it.
+#
+# The first twelve are the original set; the last six were added on
+# 2026-09-21 and are listed in docs/baselines/README.md section 1 with the
+# class each one fills:
+#     qcdr      B7  change point / restart   (the class had no URB arm)
+#     dfp       --  equilibrium seeking, mean-field game (a new class)
+#     pmpg      --  performative retraining, the control for Theorem B2
+#     doraemon  B9  adaptive domain randomisation (dr_ippo is the fixed one)
+#     wisdom    B7/B8  learned predictive representation
+#     m3w       B12 model-based MARL      (the class had no arm anywhere)
 #
 # ARMS=1 adds each baseline's OWN declared ablation (lcpo/a2c isolates the local
 # constraint from the critic, ernie/ernie_no_st is the paper's "w/o ST",
-# dgn/dgn_r is the paper's "DGN-R", rma/oa is RMA's literal history input).
+# dgn/dgn_r is the paper's "DGN-R", rma/oa is RMA's literal history input;
+# qcdr/rr and qcdr/master are the paper's own two controls, dfp/br removes the
+# averaging, pmpg/cont removes the deployment schedule, doraemon/fixed removes
+# the adaptation, wisdom/flat removes the decomposition, m3w/mlp removes the
+# mixture of experts and m3w/greedy removes MPPI).
 # They are off by default because they answer "which PART of this method did the
 # work", which is a question for after the headline table exists.
 # ---------------------------------------------------------------------------
@@ -285,6 +299,12 @@ for S in $TORCH_SEEDS; do
     run "urls_$S"        urls.py        --torch-seed "$S"
     run "dr_ippo_$S"     dr_ippo.py     --torch-seed "$S"
     run "oracle_ippo_$S" oracle_ippo.py --torch-seed "$S"
+    run "qcdr_$S"        qcdr.py        --torch-seed "$S"
+    run "dfp_$S"         dfp.py         --torch-seed "$S"
+    run "pmpg_$S"        pmpg.py        --torch-seed "$S"
+    run "doraemon_$S"    doraemon.py    --torch-seed "$S"
+    run "wisdom_$S"      wisdom.py      --torch-seed "$S"
+    run "m3w_$S"         m3w.py         --torch-seed "$S"
 
     if [[ "$ARMS" == "1" ]]; then
         run "lcpo_a2c_$S"    lcpo.py        --torch-seed "$S" --arm a2c
@@ -295,6 +315,15 @@ for S in $TORCH_SEEDS; do
         run "eso2_$S"        eso.py         --torch-seed "$S" --arm eso2
         run "rma_oa_$S"      rma.py         --torch-seed "$S" --history-features oa
         run "mfq_all_$S"     mfq.py         --torch-seed "$S" --field-scope od
+        run "qcdr_rr_$S"     qcdr.py        --torch-seed "$S" --arm rr
+        run "qcdr_mas_$S"    qcdr.py        --torch-seed "$S" --arm master
+        run "dfp_br_$S"      dfp.py         --torch-seed "$S" --arm br
+        run "pmpg_ipga_$S"   pmpg.py        --torch-seed "$S" --arm ipga
+        run "pmpg_cont_$S"   pmpg.py        --torch-seed "$S" --arm cont
+        run "doraemon_fx_$S" doraemon.py    --torch-seed "$S" --arm fixed
+        run "wisdom_flat_$S" wisdom.py      --torch-seed "$S" --arm flat
+        run "m3w_mlp_$S"     m3w.py         --torch-seed "$S" --arm mlp
+        run "m3w_greedy_$S"  m3w.py         --torch-seed "$S" --arm greedy
     fi
 done
 

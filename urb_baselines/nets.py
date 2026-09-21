@@ -11,10 +11,11 @@ Nothing in this file is method-specific. Anything a single baseline needs lives
 in that baseline's own module.
 """
 
+import numpy as np
 import torch
 import torch.nn as nn
 
-__all__ = ["MLP", "orthogonal_init", "GRUCore"]
+__all__ = ["MLP", "orthogonal_init", "GRUCore", "RunningNorm"]
 
 
 class MLP(nn.Module):
@@ -92,3 +93,38 @@ class GRUCore(nn.Module):
 
     def zero_state(self, batch=1, device=None):
         return torch.zeros(1, batch, self.hidden_size, device=device)
+
+
+class RunningNorm(object):
+    """Causal per-dimension standardisation, Welford.
+
+    Not method-specific: it is the device ``docs/baselines/README.md`` section 4
+    records as the fix for URB's reward and observation scales (HARL's
+    ``use_feature_normalization``, LCPO's ``ret_rms``, LIAM's
+    ``standardise_stream`` are all this). ``enabled=False`` returns the raw
+    value, so each arm can ship the degenerate behaviour behind a config flag
+    and reproduce it on demand.
+
+    Causal by construction: ``__call__`` uses only the values already pushed
+    through ``update``, so nothing from the future leaks into a day's input.
+    """
+
+    def __init__(self, dim):
+        self.dim = int(dim)
+        self.n = 0
+        self.mean = np.zeros(self.dim, dtype=np.float64)
+        self.m2 = np.zeros(self.dim, dtype=np.float64)
+
+    def update(self, x):
+        x = np.asarray(x, dtype=np.float64).reshape(-1)
+        self.n += 1
+        d = x - self.mean
+        self.mean += d / self.n
+        self.m2 += d * (x - self.mean)
+
+    def __call__(self, x, enabled=True):
+        x = np.asarray(x, dtype=np.float64).reshape(-1)
+        if not enabled or self.n < 2:
+            return x.astype(np.float32)
+        sd = np.sqrt(self.m2 / self.n)
+        return ((x - self.mean) / (sd + 1e-6)).astype(np.float32)

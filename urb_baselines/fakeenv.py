@@ -110,7 +110,10 @@ class FakeURB(object):
 
         # congestion: BPR-ish delay from the load on each (od, path), with a
         # weather multiplier that shrinks capacity -- the same shape as URB-NS.
-        g = 1.0 - self.sigma * 0.14 * self.A(self.day)
+        # `_ns_sigma` is what the severity wrapper carries and what the
+        # randomisation arms rewrite in reset(); it is initialised to `sigma`,
+        # so every non-randomising arm sees exactly the value it saw before.
+        g = 1.0 - float(getattr(self, "_ns_sigma", self.sigma)) * 0.14             * self.A(self.day)
         tt = np.zeros(self.n_agents)
         load = {}
         for i in range(self.n_agents):

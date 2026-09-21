@@ -1,0 +1,50 @@
+{
+    "desc": [
+        "Deep Fictitious Play on URB. The equilibrium-seeking arm: nothing in the",
+        "previous twelve solves for a population distribution.",
+        "Source: Solving Continuous Mean Field Games, NeurIPS 2025, arXiv:2510.22158.",
+        "Host block == ippo/config1.json.",
+        "",
+        "  arm = fp    the paper's fictitious play: the population mix is averaged",
+        "      with weight 1/(n+1) in FP ITERATIONS. 'ema' averages with rho instead",
+        "      and 'br' removes the averaging entirely (the ablation).",
+        "  fp_every = 10   days per FP iteration. The paper's inner loop trains a",
+        "      best response against a frozen population; here that is ten days of",
+        "      the host's own updates.",
+        "  br_frac = 0.1   the anticipatory parameter: the fraction of decisions",
+        "      taken by the best response rather than the average policy, so the BR",
+        "      keeps seeing on-policy data. Heinrich & Silver's default.",
+        "  rho = 0.99  only used by --arm ema.",
+        "  avg_capacity = 2000   reservoir size for the average policy, which is",
+        "      what makes it an average over history rather than a copy of the",
+        "      latest best response.",
+        "  field_scope = all   whose actions form the population. A same-OD",
+        "      population is ONE traveller on six of URB's seven cities, so an",
+        "      OD-scoped mean field carries no information (the measurement is in",
+        "      mfq's FIELD-1).",
+        "  The conditional normalizing flow of the paper is N/A here: the population",
+        "      distribution is a point on the K-simplex and is represented exactly."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "dfp": {
+        "arm": "fp",
+        "fp_every": 10,
+        "br_frac": 0.1,
+        "rho": 0.99,
+        "avg_capacity": 2000,
+        "field_scope": "all",
+        "print_every": 100
+    }
+}

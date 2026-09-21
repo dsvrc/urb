@@ -1,0 +1,61 @@
+{
+    "desc": [
+        "DORAEMON on URB. paper/BASELINES.md B9 (robust RL), the adaptive form of",
+        "the domain randomisation that dr_ippo does with a fixed uniform range.",
+        "Source: Tiboni et al., ICLR 2024, arXiv:2311.01885; code",
+        "gabrieletiboni/doraemon.",
+        "Host block == ippo/config1.json. The learner is URB's IPPO and is never",
+        "told sigma; only the distribution the environment draws from changes.",
+        "",
+        "  dr_range = [0, 3]   B9's range verbatim, the same support as dr_ippo.",
+        "  init_beta_param = 100   the released code's default (Beta(100,100)),",
+        "      i.e. start narrow and let the entropy objective widen it.",
+        "  alpha = 0.5   the desired success rate. The paper states it selected 0.5",
+        "      for ALL of its experiments; it is not tuned here.",
+        "  kl_ub = 0.05  the KL trust region. The paper grid-searches this per",
+        "      environment over roughly 0.001 .. 0.1; 0.05 is the middle of the",
+        "      range they report and was not chosen by looking at URB returns.",
+        "  beta_param_bounds = [0.5, 200]   the box the optimiser searches, which",
+        "      keeps the Beta from degenerating to a spike or to a bimodal shape.",
+        "  update_every_days = 100   the paper's K episodes per distribution update.",
+        "  warmup_days = 200, perf_lb = null   the success threshold is CALIBRATED",
+        "      as the median relative excess delay over the first 200 days and then",
+        "      FROZEN. The paper's success indicator is task-specific by design;",
+        "      this rule is declared, reproducible and reads nothing from returns.",
+        "  sigma_floor = 1e-9   same reason as dr_ippo: a draw of exactly 0 falls",
+        "      off the severity wrapper's bookkeeping path for one day."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "doraemon": {
+        "arm": "doraemon",
+        "dr_range": [
+            0.0,
+            3.0
+        ],
+        "init_beta_param": 100.0,
+        "alpha": 0.5,
+        "kl_ub": 0.05,
+        "beta_param_bounds": [
+            0.5,
+            200.0
+        ],
+        "grid": 21,
+        "update_every_days": 100,
+        "warmup_days": 200,
+        "perf_lb": null,
+        "sigma_floor": 1e-09,
+        "print_every": 100
+    }
+}

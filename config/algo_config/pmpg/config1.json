@@ -1,0 +1,44 @@
+{
+    "desc": [
+        "Independent learning in a performative Markov potential game. The control",
+        "for PACT_THEORY Theorem B2 (performative stability of the estimator).",
+        "Source: Sahitaj, Sasnauskas, Yalin, Mandal & Radanovic, arXiv:2504.20593.",
+        "Host block == ippo/config1.json.",
+        "",
+        "  arm = inpg  independent NATURAL policy gradient, which the paper proves",
+        "      converges to a performatively stable equilibrium in the LAST iterate.",
+        "      'ipga' is their plain policy gradient ascent; 'cont' keeps INPG but",
+        "      drops the deployment schedule, isolating it.",
+        "  deploy_window = 64   days per deployment before a retrain. Chosen as one",
+        "      full host batch per agent: URB gives one sample per agent per day and",
+        "      ippo/config1.json sets batch_size = 64, so a window shorter than this",
+        "      could not retrain at all. Not tuned on returns.",
+        "  retrain_epochs = 20   passes over the window per deployment. Repeated",
+        "      RISK MINIMISATION means retraining to convergence on the deployment's",
+        "      own data, not taking a few steps on it.",
+        "  eta = 0.5   the natural-gradient step in logit space. For a softmax",
+        "      policy the NPG step is exactly a shift of the logits by",
+        "      eta * advantage (Agarwal, Kakade, Lee & Mahajan 2021), and that is",
+        "      how it is applied."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 2,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "pmpg": {
+        "arm": "inpg",
+        "deploy_window": 64,
+        "retrain_epochs": 20,
+        "eta": 0.5,
+        "print_every": 100
+    }
+}

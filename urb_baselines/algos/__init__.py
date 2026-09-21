@@ -14,8 +14,14 @@
     dr_ippo.py     domain rand.   -- B9's "must": IPPO under resampled sigma
     eso.py         ESO / DOB      -- linear ADRC disturbance observer, no peers
     urls.py        unstructured RLS on the raw peer actions
+    dfp.py         Deep FP        -- NeurIPS 2025, fictitious play / mean field
+    pmpg.py        INPG + retrain -- performative Markov potential games, 2025
+    doraemon.py    DORAEMON       -- ICLR 2024, entropy-maximising domain rand.
+    wisdom.py      WISDOM         -- 2025, wavelet predictive representations
 
   off-policy (built on the DQN base of ``scripts/iql.py``)
     dgn.py         DGN            -- ICLR 2020, graph convolutional RL
     mfq.py         MF-Q           -- ICML 2018, mean-field Q-learning
+    qcdr.py        QCD restart    -- 2024, change detection + restart bandits
+    m3w.py         M3W            -- NeurIPS 2025, MoE world model + MPPI
 """

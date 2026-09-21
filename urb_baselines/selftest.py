@@ -63,6 +63,12 @@ _ARM_CLASS = {
     "mfq": ("mfq", "MFQ"),
     "eso": ("eso", "ESO"),
     "urls": ("urls", "UnstructuredRLS"),
+    "qcdr": ("qcdr", "QCDRestart"),
+    "dfp": ("dfp", "DeepFictitiousPlay"),
+    "pmpg": ("pmpg", "PerformativeMPG"),
+    "doraemon": ("doraemon", "DORAEMON"),
+    "wisdom": ("wisdom", "WISDOM"),
+    "m3w": ("m3w", "M3W"),
 }
 
 
@@ -344,8 +350,9 @@ def g_domain_random():
 
 
 ON_POLICY_ARMS = ("lcpo", "happo", "ernie", "rippo", "rma", "liam",
-                  "oracle_ippo", "dr_ippo")
-OFF_POLICY_ARMS = ("dgn", "mfq")
+                  "oracle_ippo", "dr_ippo",
+                  "dfp", "pmpg", "doraemon", "wisdom")
+OFF_POLICY_ARMS = ("dgn", "mfq", "qcdr", "m3w")
 COMPENSATOR_ARMS = ("eso", "urls")          # non-learning; iql host block
 ALL_ARMS = ON_POLICY_ARMS + OFF_POLICY_ARMS + COMPENSATOR_ARMS
 
@@ -353,6 +360,253 @@ ALL_ARMS = ON_POLICY_ARMS + OFF_POLICY_ARMS + COMPENSATOR_ARMS
 def _repo():
     return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         ".."))
+
+
+#: ``numpy.trapezoid`` is numpy >= 2.0; URB pins numpy >= 2.0.2 but the gates
+#: must still run on whatever is installed where someone checks them.
+_trapz = getattr(np, "trapezoid", None) or np.trapz
+
+
+def g_qcdr_glr():
+    """QCDR-1: the Bernoulli-GLR fires on a change point and not on noise.
+
+    The paper's whole argument is about WHEN a detector crosses its threshold,
+    so the statistic and the threshold are checked against a stream whose change
+    point is known, and against one that has none. A detector that fires on
+    everything and one that fires on nothing both produce plausible curves.
+    """
+    from urb_baselines.algos.qcdr import (bernoulli_glr, glr_threshold,
+                                          binary_kl)
+    rng = np.random.RandomState(0)
+    delta = 1.0 / np.sqrt(4000.0)
+
+    stationary = (rng.rand(200) < 0.5).astype(float)
+    g_stat = bernoulli_glr(stationary)
+    thr = glr_threshold(200, delta)
+    assert g_stat < thr, (f"the GLR fired on a stationary Bernoulli(0.5) "
+                          f"stream: {g_stat:.2f} > {thr:.2f}")
+
+    changed = np.concatenate([(rng.rand(100) < 0.2).astype(float),
+                              (rng.rand(100) < 0.8).astype(float)])
+    g_chg = bernoulli_glr(changed)
+    assert g_chg > thr, (f"the GLR missed a 0.2 -> 0.8 change: "
+                         f"{g_chg:.2f} <= {thr:.2f}")
+
+    # the statistic itself, against the definition, at the true split
+    s = 100
+    mu_l, mu_r = changed[:s].mean(), changed[s:].mean()
+    mu_a = changed.mean()
+    by_hand = s * binary_kl(mu_l, mu_a) + (len(changed) - s) * binary_kl(mu_r,
+                                                                        mu_a)
+    assert g_chg >= by_hand - 1e-9, "the max over split points missed the truth"
+    return (f"stationary {g_stat:.2f} < {thr:.2f} < changed {g_chg:.2f}; "
+            f"true-split value {float(by_hand):.2f}")
+
+
+def g_qcdr_scale():
+    """QCDR-2: at URB's reward scale the RAW stream cannot fire, the mapped one
+    can. This is the measurement behind ``normalize_stream``."""
+    from urb_baselines.algos.qcdr import _Stream, bernoulli_glr, glr_threshold
+    rng = np.random.RandomState(1)
+    before = -1000.0 + 40.0 * rng.randn(150)
+    after = -700.0 + 40.0 * rng.randn(150)
+    rewards = np.concatenate([before, after])
+    out = {}
+    for norm in (False, True):
+        st = _Stream(1, norm, 10000)
+        for r in rewards:
+            st.push(0, float(r))
+        h = st.hist[0]
+        out[norm] = (bernoulli_glr(h), float(np.std(h)))
+    thr = glr_threshold(len(rewards), 1.0 / np.sqrt(4000.0))
+    assert out[False][0] < thr, "the raw stream fired, which it cannot"
+    assert out[False][1] < 1e-9, (
+        f"the raw stream was not constant after clipping "
+        f"(spread {out[False][1]:.3g})")
+    assert out[True][0] > thr, (f"the mapped stream missed a 300-second shift: "
+                                f"{out[True][0]:.2f} <= {thr:.2f}")
+    return (f"raw: GLR {out[False][0]:.2f}, spread {out[False][1]:.1e} "
+            f"(cannot fire); mapped: GLR {out[True][0]:.2f} > {thr:.2f}")
+
+
+def g_dfp_average():
+    """DFP-1: fictitious play averages with weight 1/(n+1), so the mix converges
+    to the empirical mean of the days it has seen."""
+    from urb_baselines.algos.dfp import DeepFictitiousPlay
+    env = FakeURB(n_agents=24, n_machines=12, n_od=3, n_paths=4, seed=3)
+    ctx = make_ctx(env, algo_cfg={"fp_every": 1}, params={"training_eps": 80})
+    with contextlib.redirect_stdout(io.StringIO()):
+        algo = DeepFictitiousPlay(ctx)
+    K = env.n_paths
+    rng = np.random.RandomState(5)
+    truth = np.zeros(K)
+    n_days = 60
+    for d in range(n_days):
+        acts = rng.randint(0, K, size=env.n_agents)
+        info = EpisodeInfo(d, "train")
+        info.peer_acts = {env.ids[i]: int(acts[i]) for i in range(env.n_agents)}
+        cnt = np.bincount(acts, minlength=K).astype(float)
+        truth += cnt / cnt.sum()
+        with contextlib.redirect_stdout(io.StringIO()):
+            algo.end_episode(d, "train", info)
+    truth /= n_days
+    err = float(np.abs(algo.mu_bar - truth).max())
+    assert algo.fp_iter == n_days, f"{algo.fp_iter} FP iterations, not {n_days}"
+    assert err < 0.02, (f"the FP average is not the empirical mean of the "
+                        f"daily mixes (max error {err:.4f})")
+    assert abs(algo.mu_bar.sum() - 1.0) < 1e-9, "the mix is not a distribution"
+    return (f"{n_days} FP iterations; |mu_bar - empirical mean|_inf = "
+            f"{err:.4f}")
+
+
+def g_pmpg_npg():
+    """PMPG-1: for a softmax policy the natural-gradient step IS a logit shift.
+
+    Agarwal, Kakade, Lee & Mahajan (2021). The arm implements INPG as mirror
+    descent onto ``softmax(logits + eta * A)``; this checks that the target it
+    builds is that object and that it differs from the vanilla gradient's.
+    """
+    from urb_baselines.algos.pmpg import PerformativeMPG
+    env = FakeURB(n_agents=16, n_machines=8, n_od=2, n_paths=4, seed=7)
+    ctx = make_ctx(env, algo_cfg={"deploy_window": 4, "retrain_epochs": 1,
+                                  "eta": 0.5},
+                   params={"training_eps": 40, "batch_size": 4})
+    with contextlib.redirect_stdout(io.StringIO()):
+        algo = PerformativeMPG(ctx)
+    m = algo.models[env.av_ids[0]]
+    rng = np.random.RandomState(11)
+    for _ in range(8):
+        s = rng.randn(algo.obs_size).astype(np.float32)
+        m.memory.append((s, int(rng.randint(4)), 0.0, float(rng.randn())))
+    states = torch.FloatTensor(np.asarray([x[0] for x in m.memory]))
+    actions = torch.LongTensor([x[1] for x in m.memory])
+    rewards = torch.FloatTensor([x[3] for x in m.memory])
+    adv = m._advantage(rewards)
+    with torch.no_grad():
+        dep = m.policy_net(states)
+    shift = torch.zeros_like(dep)
+    shift.scatter_(1, actions.unsqueeze(1), (algo.eta * adv).unsqueeze(1))
+    target = torch.softmax(dep + shift, dim=-1)
+    base = torch.softmax(dep, dim=-1)
+
+    # the shift moves probability toward positive-advantage actions, and only
+    # toward them -- that is what makes it the natural gradient and not noise
+    taken = torch.gather(target - base, 1, actions.unsqueeze(1)).squeeze(1)
+    agree = float(((taken > 0) == (adv > 0)).float().mean().item())
+    assert agree > 0.99, (f"the logit shift moved the taken action's "
+                          f"probability the wrong way {1 - agree:.0%} of the time")
+    with contextlib.redirect_stdout(io.StringIO()):
+        v = algo._retrain_one(m)
+    assert v is not None, "the retrain did not run on a full window"
+    assert len(m.memory) == 0, "the window was not consumed by the retrain"
+    return (f"logit shift agrees with sign(A) {agree:.0%}; max |dp| "
+            f"{float((target - base).abs().max().item()):.4f}")
+
+
+def g_doraemon_opt():
+    """DOR-1: the Beta closed forms are right and the solve respects both
+    constraints while increasing entropy."""
+    from urb_baselines.algos.doraemon import BetaDR, solve_doraemon, \
+        _success_estimate
+    a = BetaDR(2.0, 5.0, 0.0, 3.0)
+    # entropy and KL against numerical integration on the unit interval
+    xs = np.linspace(1e-6, 1 - 1e-6, 200001)
+    pa = np.exp(a.log_pdf_unit(xs))
+    h_num = -_trapz(pa * a.log_pdf_unit(xs), xs) + np.log(3.0)
+    assert abs(h_num - a.entropy()) < 1e-4, (
+        f"entropy {a.entropy():.6f} != numerical {h_num:.6f}")
+    b = BetaDR(3.0, 4.0, 0.0, 3.0)
+    kl_num = float(_trapz(pa * (a.log_pdf_unit(xs) - b.log_pdf_unit(xs)),
+                                xs))
+    assert abs(kl_num - a.kl_to(b)) < 1e-4, (
+        f"KL {a.kl_to(b):.6f} != numerical {kl_num:.6f}")
+    assert a.kl_to(a) < 1e-12, "KL(p||p) is not zero"
+
+    # everything succeeds -> the solve should widen, inside the trust region
+    cur = BetaDR(100.0, 100.0, 0.0, 3.0)
+    rng = np.random.RandomState(2)
+    u = cur.to_unit(np.asarray([cur.sample(rng) for _ in range(400)]))
+    succ = np.ones_like(u)
+    new, info = solve_doraemon(cur, u, succ, alpha=0.5, kl_ub=0.05,
+                               bounds=[0.5, 200.0], grid=21)
+    assert new.kl_to(cur) <= 0.05 + 1e-9, (
+        f"the solve left the trust region: KL {new.kl_to(cur):.4f}")
+    assert new.entropy() > cur.entropy(), "the solve did not widen"
+    assert _success_estimate(new, cur, u, succ) >= 0.5 - 1e-9, \
+        "the returned distribution violates the success constraint"
+
+    # nothing succeeds -> the backup problem, still inside the trust region
+    new2, info2 = solve_doraemon(cur, u, np.zeros_like(u), alpha=0.5,
+                                 kl_ub=0.05, bounds=[0.5, 200.0], grid=21)
+    assert new2.kl_to(cur) <= 0.05 + 1e-9, "the backup left the trust region"
+    assert info2["mode"] in ("backup", "none"), info2["mode"]
+    return (f"entropy/KL match numerical integration to 1e-4; widened "
+            f"{cur.entropy():+.3f} -> {new.entropy():+.3f} at KL "
+            f"{new.kl_to(cur):.4f} <= 0.05")
+
+
+def g_wisdom_haar():
+    """WAV-1: the wavelet layer at initialisation IS a Haar DWT.
+
+    The filters are learnable, so after training they are not a Haar transform
+    any more -- but if they do not START as one, the arm is a convolution with
+    the wrong name, and nothing downstream would say so.
+    """
+    from urb_baselines.algos.wisdom import WaveletNet
+    net = WaveletNet(latent_dim=1, levels=2)
+    x = torch.tensor([[1.0, 3.0, 2.0, 8.0]]).unsqueeze(-1)   # (1, 4, 1)
+    with torch.no_grad():
+        _, bands = net(x)
+    r2 = float(np.sqrt(0.5))
+    g1 = [(1.0 - 3.0) * r2, (2.0 - 8.0) * r2]
+    u1 = [(1.0 + 3.0) * r2, (2.0 + 8.0) * r2]
+    g2 = (u1[0] - u1[1]) * r2
+    u2 = (u1[0] + u1[1]) * r2
+    got = [float(b.reshape(-1)[0]) for b in bands]
+    want = [g1[-1], g2, u2]
+    err = max(abs(a - b) for a, b in zip(got, want))
+    assert err < 1e-5, f"bands {got} != hand-computed Haar {want}"
+    # energy is preserved by an orthonormal transform
+    e_in = float((x ** 2).sum())
+    e_out = g1[0] ** 2 + g1[1] ** 2 + g2 ** 2 + u2 ** 2
+    assert abs(e_in - e_out) < 1e-4, f"energy {e_in} -> {e_out}"
+    return (f"levels 1-2 match a hand-computed Haar DWT to {err:.1e}; "
+            f"energy preserved ({e_in:.1f})")
+
+
+def g_m3w_twohot():
+    """M3W-1: the two-hot code round-trips, and URB's reward scale destroys it.
+
+    This is the measurement behind ``normalize_reward``: with the release's own
+    [-10, 10] support, every URB reward lands in the bottom bin, so the reward
+    model has nothing to predict and the planner scores every joint action the
+    same.
+    """
+    from urb_baselines.algos.m3w import TwoHot
+    dev = torch.device("cpu")
+    th = TwoHot(-10.0, 10.0, 101, dev)
+    v = torch.tensor([-7.3, 0.0, 2.5, 9.99])
+    code = th.encode(v)
+    assert torch.allclose(code.sum(-1), torch.ones(4), atol=1e-6), \
+        "the two-hot code is not a distribution"
+    back = (code * th.centres).sum(-1)
+    assert float((back - v).abs().max()) < 1e-4, f"round trip {back} != {v}"
+
+    raw = torch.tensor([-1200.0, -1000.0, -800.0, -600.0])
+    craw = th.encode(raw)
+    assert float(craw[:, 0].min()) > 0.999, (
+        "the raw URB rewards did NOT all collapse into the bottom bin -- the "
+        "measurement this gate is built on has changed")
+    assert float((craw.max(dim=0).values - craw.min(dim=0).values).max()) < 1e-6, \
+        "the raw codes differ, so the collapse is not total"
+    assert th.clipped_fraction(raw) == 1.0, "clipped_fraction missed the clip"
+
+    std = (raw - raw.mean()) / raw.std()
+    cstd = th.encode(std)
+    spread = float((cstd.max(dim=0).values - cstd.min(dim=0).values).max())
+    assert spread > 0.5, f"the standardised codes barely differ ({spread:.3f})"
+    return ("round trip < 1e-4; raw -1200..-600 all collapse to bin 0 "
+            f"(identical codes), standardised spread {spread:.2f}")
 
 
 def g_config_host_block():
@@ -526,6 +780,11 @@ def drive(cls, algo_cfg=None, ctx_kw=None, days=200, seed=1):
         mids = set(env.av_ids)
         early, late = [], []
         for d in range(days):
+            # The host calls env.reset() at the top of every day, and the arms
+            # that WRAP reset (domain randomisation, DORAEMON) draw their
+            # severity there. A harness that skipped it would make those arms
+            # look inert for a reason that is not theirs.
+            env.reset()
             info = EpisodeInfo(d, "train")
             if ctx.context is not None:
                 info.context = ctx.context.observed(d)
@@ -554,6 +813,7 @@ def drive(cls, algo_cfg=None, ctx_kw=None, days=200, seed=1):
              else []).append(m)
 
         algo.begin_test()
+        env.reset()
         info = EpisodeInfo(days, "test")
         algo.begin_episode(days, "test")
         rewards, records = env.run_day(lambda a, o: int(algo.act(a, o)))
@@ -633,6 +893,53 @@ def _chk_liam(algo, diag):
     return f"rec_o {diag['rec_o']:.2f}, rec_a {diag['rec_a']:.2f}"
 
 
+def _chk_qcdr(algo, diag):
+    assert diag["u_spread"] > 1e-4, (
+        "the mapped reward stream is constant, so no detector could fire -- "
+        "check normalize_stream")
+    return (f"{diag['restarts']} restarts, u_spread {diag['u_spread']:.3f}"
+            + (f", GLR/thr {diag['glr_frac']:.2f}" if "glr_frac" in diag else ""))
+
+
+def _chk_dfp(algo, diag):
+    assert algo.n_mix_updates > 0, "the population mix was never updated"
+    assert diag["fp_iter"] > 0, "not one FP iteration completed"
+    return (f"{diag['fp_iter']} FP iterations, |mu-uniform| "
+            f"{diag['mix_dev']:.3f}")
+
+
+def _chk_pmpg(algo, diag):
+    assert diag["retrains"] > 0, "no deployment was ever retrained"
+    assert algo.dtheta and max(algo.dtheta) > 1e-12, (
+        "the parameters never moved across a retrain")
+    return f"{diag['retrains']} retrains, last ||d theta|| {diag['dtheta']:.2e}"
+
+
+def _chk_doraemon(algo, diag):
+    assert algo.perf_lb is not None, "the success threshold never calibrated"
+    assert diag["upd"] > 0, "the severity distribution was never updated"
+    return (f"{diag['upd']} distribution updates, Beta({diag['beta_a']:.1f}, "
+            f"{diag['beta_b']:.1f}), H {diag['H']:+.3f}")
+
+
+def _chk_wisdom(algo, diag):
+    assert diag["upd"] > 0, "the representation was never trained"
+    assert diag["z_std"] > 1e-4, (
+        f"the latent is constant (z_std {diag['z_std']:.2e}) -- the encoder "
+        "collapsed; check normalize_context")
+    return f"{diag['upd']} updates, z_std {diag['z_std']:.3f}"
+
+
+def _chk_m3w(algo, diag):
+    assert diag["wm_upd"] > 0, "the world model was never trained"
+    assert diag["plans"] > 0, "no day was ever planned"
+    assert diag["plan_spread"] > 1e-4, (
+        "every sampled joint action scores the same -- the reward model is a "
+        "constant and MPPI is a uniform draw; check normalize_reward")
+    return (f"{diag['plans']} plans, spread {diag['plan_spread']:.3f}, "
+            f"clip {diag['clip']:.2f}")
+
+
 # One drive gate per baseline, in its primary configuration. The ablation arms
 # are a separate list behind --arms: they are worth checking (a broken `--arm`
 # path would otherwise ship silently, since CFG-2 only exercises the shipped
@@ -655,6 +962,23 @@ DRIVES = [
     ("drive eso", "eso", "ESO", None, None, _chk_eso),
     ("drive urls", "urls", "UnstructuredRLS", None, None, _chk_urls),
     ("drive oracle_ippo", "oracle_ippo", "OracleDriverIPPO", None, None, None),
+    ("drive qcdr", "qcdr", "QCDRestart", {"min_hist": 8, "max_hist": 64},
+     None, _chk_qcdr),
+    ("drive dfp", "dfp", "DeepFictitiousPlay", {"fp_every": 5,
+     "avg_capacity": 200}, None, _chk_dfp),
+    ("drive pmpg", "pmpg", "PerformativeMPG",
+     {"deploy_window": 24, "retrain_epochs": 4}, None, _chk_pmpg),
+    ("drive doraemon", "doraemon", "DORAEMON",
+     {"update_every_days": 20, "warmup_days": 20, "grid": 9}, None,
+     _chk_doraemon),
+    ("drive wisdom", "wisdom", "WISDOM",
+     {"seq_len": 8, "wav_batch": 8, "train_every": 2, "latent_dim": 4}, None,
+     _chk_wisdom),
+    ("drive m3w", "m3w", "M3W",
+     {"latent_dim": 16, "hidden": 32, "num_dynamics_experts": 3,
+      "num_reward_experts": 4, "num_samples": 16, "num_elites": 4,
+      "iterations": 2, "num_pi_trajs": 2, "wm_batch": 32, "warmup_days": 20,
+      "graph": "od"}, None, _chk_m3w),
 ]
 
 ARM_DRIVES = [
@@ -670,6 +994,23 @@ ARM_DRIVES = [
     ("drive eso --arm eso2", "eso", "ESO", None, {"arm": "eso2"}, _chk_eso),
     ("drive mfq --field-scope od", "mfq", "MFQ", {"field_scope": "od"}, None,
      _chk_mfq),
+    ("drive qcdr --arm rr", "qcdr", "QCDRestart", {"xi": 0.2}, {"arm": "rr"},
+     _chk_qcdr),
+    ("drive qcdr --arm master", "qcdr", "QCDRestart", None, {"arm": "master"},
+     None),
+    ("drive dfp --arm br", "dfp", "DeepFictitiousPlay", None, {"arm": "br"},
+     None),
+    ("drive pmpg --arm ipga", "pmpg", "PerformativeMPG",
+     {"deploy_window": 24, "retrain_epochs": 4}, {"arm": "ipga"}, _chk_pmpg),
+    ("drive doraemon --arm fixed", "doraemon", "DORAEMON",
+     {"update_every_days": 20, "warmup_days": 20}, {"arm": "fixed"}, None),
+    ("drive wisdom --arm flat", "wisdom", "WISDOM",
+     {"seq_len": 8, "wav_batch": 8, "train_every": 2, "latent_dim": 4},
+     {"arm": "flat"}, _chk_wisdom),
+    ("drive m3w --arm mlp", "m3w", "M3W",
+     {"latent_dim": 16, "hidden": 32, "num_samples": 16, "num_elites": 4,
+      "iterations": 2, "num_pi_trajs": 2, "wm_batch": 32, "warmup_days": 20,
+      "graph": "od"}, {"arm": "mlp"}, _chk_m3w),
 ]
 
 
@@ -699,6 +1040,13 @@ def main():
         ("neighbour graph (GRAPH-1)", g_graph_static),
         ("domain randomisation (DR-1)", g_domain_random),
         ("device resolution (DEV-1)", g_device),
+        ("qcdr GLR detector (QCDR-1)", g_qcdr_glr),
+        ("qcdr reward scale (QCDR-2)", g_qcdr_scale),
+        ("dfp FP averaging (DFP-1)", g_dfp_average),
+        ("pmpg natural gradient (PMPG-1)", g_pmpg_npg),
+        ("doraemon entropy solve (DOR-1)", g_doraemon_opt),
+        ("wisdom Haar transform (WAV-1)", g_wisdom_haar),
+        ("m3w two-hot scale (M3W-1)", g_m3w_twohot),
         ("config host block (CFG-1)", g_config_host_block),
         ("config constructs (CFG-2)", g_config_constructs),
         ("record splitting (REC-1)", g_records),

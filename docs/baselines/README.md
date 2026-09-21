@@ -31,6 +31,18 @@ you read to check the work.
 | 10 | **Unstructured RLS** | B10 classical control | non-learning | `scripts/urls.py` | [CHECKLIST_urls.md](CHECKLIST_urls.md) |
 | 11 | **Domain randomisation over σ** | B9 robust (the "must") | on-policy | `scripts/dr_ippo.py` | [CHECKLIST_dr_ippo.md](CHECKLIST_dr_ippo.md) |
 | 12 | **Oracle-driver IPPO** | information arm | on-policy | `scripts/oracle_ippo.py` | [CHECKLIST_oracle_ippo.md](CHECKLIST_oracle_ippo.md) |
+| 13 | **QCD restart** (2024) | B7 change point, drift *unobserved* | off-policy | `scripts/qcdr.py` | [CHECKLIST_qcdr.md](CHECKLIST_qcdr.md) |
+| 14 | **Deep FP** (NeurIPS 2025) | *new class*: equilibrium seeking | on-policy | `scripts/dfp.py` | [CHECKLIST_dfp.md](CHECKLIST_dfp.md) |
+| 15 | **Performative MPG** (2025) | *new*: control for Theorem B2 | on-policy | `scripts/pmpg.py` | [CHECKLIST_pmpg.md](CHECKLIST_pmpg.md) |
+| 16 | **DORAEMON** (ICLR 2024) | B9 robust, *adaptive* randomisation | on-policy | `scripts/doraemon.py` | [CHECKLIST_doraemon.md](CHECKLIST_doraemon.md) |
+| 17 | **WISDOM** (2025) | B7/B8 learned predictive representation | on-policy | `scripts/wisdom.py` | [CHECKLIST_wisdom.md](CHECKLIST_wisdom.md) |
+| 18 | **M3W** (NeurIPS 2025) | B12 model-based MARL | off-policy | `scripts/m3w.py` | [CHECKLIST_m3w.md](CHECKLIST_m3w.md) |
+
+Arms 1-12 were implemented on 2026-09-19; **arms 13-18 on 2026-09-21**. The six
+later ones close the three classes that had no URB arm at all -- B7
+(change point, drift unobserved), B12 (model-based MARL) and equilibrium
+seeking, which no class covered -- plus the adaptive form of B9 and the learned
+form of the estimator. Each one's checklist opens with why that class was open.
 
 "on-policy" means it is built on URB's own on-policy learner, the single-step
 actor-only PPO of `scripts/ippo.py`; "off-policy" means URB's own single-step DQN
@@ -49,7 +61,7 @@ bash scripts/sweep/run_baselines_sigma3.sh 0
 ```
 
 One command. It runs the offline gates first (about a minute, no SUMO), then
-every Tier-1 baseline at torch seed 0 under σ = 3, through `ns_launch.py`, with
+every baseline at torch seed 0 under σ = 3, through `ns_launch.py`, with
 the same pinned route table, the same task config and the same environment seed
 the PACT-1 sweep uses. `run_baselines_sigma0.sh` is the identical command with
 the dial off, and is the no-severity row.
@@ -109,7 +121,12 @@ running somewhere else is not what was asked for.
 
 Measured ALGORITHM cost over a 4000-day run at `saint_arnoult`'s scale (222
 travellers, 88 machines, K = 4), excluding the environment step — that part is
-SUMO and is common to every arm:
+SUMO and is common to every arm. **These are the original twelve; arms 13–18 have
+not been measured on this network yet.** Five of them are small additions to a
+host learner and should land in the same band; `m3w` will not — it runs
+`num_samples × n_av × iterations ≈ 68k` reward-model forwards per day and is the
+heaviest algorithm here by a clear margin. Take the first `d/min` line of a real
+run as its estimate rather than assuming.
 
 | arm | min | ×IPPO | | arm | min | ×IPPO |
 |---|---|---|---|---|---|---|
@@ -203,6 +220,9 @@ break on the difference in ways that are silent:
 | DGN | features must reach ~50 to output −1000; attention logits are quadratic in that ⇒ every softmax saturates to a hard argmax ⇒ **the graph convolution degenerates into "copy one neighbour"** | standardise the regression target — the same device as HARL's `ValueNorm`, LCPO's `ret_rms` and LIAM's `standardise_stream` |
 | LIAM | the reconstruction target's start-time coordinate is ~1000 and constant per traveller ⇒ **99.99% of the squared error is memorising three constants** | standardise the reconstruction target per dimension |
 | LCPO | — (the authors already handle it: `a2c.py` divides rewards by `sqrt(ret_rms.var + 1)`) | reproduced verbatim |
+| **M3W** | two-hot reward coding over 101 bins spanning **[-10, 10]** ⇒ every URB reward lands in bin 0 ⇒ the reward model is a constant ⇒ every sampled joint action scores the same ⇒ **MPPI's softmax is uniform and the planner picks routes at random**, while the loss curve looks healthy | standardise the reward before the two-hot (`normalize_reward`); `plan_spread` and `clip` make it visible |
+| **QCDR** | a Bernoulli GLR is defined on [0, 1]; raw, every value clips to the same boundary and the statistic is identically 0, so **the detector can never fire** — which looks exactly like "there was no change point". A *running* standardisation is nearly as bad: it absorbs the shift (measured: GLR 15.5 vs 59.6 for the same 300 s change) | map through a **frozen** reference + logistic (`normalize_stream`, `calib`); `u_spread` makes it visible |
+| **DFP / WISDOM** | the observation leads with a start time in seconds, so a probability vector or a unit-scale latent beside it is **below the network's resolution** — measured: identical returns to 4 s.f. with and without the mean-field input, and −13 vs +153 for WISDOM over 200 gate days | standardise the policy observation (`nets.RunningNorm`), the device HAPPO needed for the same coordinate; `mix_infl` / `z_std` make it visible |
 
 Each was **measured** on `urb_baselines/fakeenv.py`, not guessed; the numbers are
 in the relevant checklist and in the module docstring. Each has an off switch so
@@ -253,8 +273,8 @@ construction. `att_spread` and `reg` are printed so this is visible; on
 1. **Read a checklist.** Each row cites the paper equation or the reference file
    and function it came from, and names the line of `urb_baselines/` that
    implements it.
-2. **Run the gates.** `python urb_baselines/selftest.py` runs 30 of them in
-   about a minute with no SUMO and no `routerl`. They are of two kinds:
+2. **Run the gates.** `python urb_baselines/selftest.py` runs 33 of them in
+   about two minutes with no SUMO and no `routerl` (53 with `--arms`). They are of two kinds:
    - *unit* gates check one equation against the paper — that LCPO's step
      respects **both** trust regions, that ERNIE's adversarial perturbation is
      measurably worse than a random one of the same budget (≈3.6×), that DGN's
@@ -291,10 +311,10 @@ here so the register is in one place.
 | method | class | why not |
 |---|---|---|
 | **HASAC** | B1 | Off-policy and continuous-action; `BASELINES.md` assigns it to the MAPDN host and HAPPO to URB. Its trust-region claim is already represented on URB by HAPPO. |
-| **LILAC** | B7 | SAC-based, continuous; assigned to MAPDN by B7 ("or skip and cite if time is short"). Its latent-per-episode idea is represented on URB by RMA's learned latent, which the checklist notes. |
+| **LILAC** | B7 | SAC-based, continuous; assigned to MAPDN by B7 ("or skip and cite if time is short"). On URB the class is now held by **QCDR** (arm 13), whose own experiments are piecewise-stationary bandits — the same object URB is for every learner — and its latent-per-episode idea is additionally represented by RMA's learned latent and WISDOM's. |
 | **TPA-for-AVC** | B11 | Domain-specific to active voltage control; its inputs are power-network quantities. Not portable to routing, and `BASELINES.md` assigns it to MAPDN. |
 | **GNN-MAPPO / GRU-MAPPO via BenchMARL** | B2, B3 | BenchMARL is not a URB host. The underlying questions are answered by R-IPPO (memory) and DGN (graph), which are the published methods rather than model flags. |
-| **DCG, MAT, QPLEX, AMAGO, MAMBA, MAMBPO, MBCD** | B3, B1, B8, B12, B7 | Tier 3 in `BASELINES.md` §D: cite, run only on request. |
+| **DCG, MAT, QPLEX, AMAGO, MAMBA, MAMBPO, MBCD** | B3, B1, B8, B12, B7 | Tier 3 in `BASELINES.md` §D: cite, run only on request. B12 itself is no longer empty — **M3W** (arm 18) holds it — so MAMBA and MAMBPO are cited as alternatives within a class that now has a representative, rather than as a class nobody ran. |
 | **M2TD3, RARL** | B9 | Continuous-action robust RL; no discrete host. ERNIE is the MARL-specific robust representative and is implemented. |
 | **VariBAD, PEARL, Decision Adapter** | B8 | `BASELINES.md` cites rather than runs them; RMA/UP-OSI is the chosen representative and is implemented. |
 | **LOLA, M-FOS, Meta-MAPG, POLA** | B5/E | Defined for two-player general-sum games with white-box or meta-game access to the opponent's learning. Not applicable at N = 89 selfish routers; `BASELINES.md` §E argues rather than runs them. |
@@ -315,21 +335,25 @@ information-matched arm is listed at the top of `urb_baselines/algos/mfq.py`.
 ```
 urb_baselines/
     host.py            the shared loop + the BaselineAlgorithm hook protocol
-    nets.py            the host MLP (identical to scripts/iql.py's Network)
+    nets.py            the host MLP (identical to scripts/iql.py's Network),
+                       plus RunningNorm, the causal standardiser the scale
+                       failures above are fixed with
     context.py         the exogenous driver A(day): observed vs privileged
     records.py         RouteRL's per-day travel times and executed actions
     graph.py           neighbour structures: od / copresence / route overlap
     domain_random.py   per-episode sigma resampling, attached to one env instance
     fakeenv.py         a 100-line numpy stand-in for URB, for the gates
-    selftest.py        the 30 offline gates
+    selftest.py        the offline gates (53 with --arms, 33 without)
     algos/
         reference.py   URB's own PPO and DQN, and the two reference arms
         lcpo.py happo.py ernie.py rippo.py rma.py liam.py
         oracle_ippo.py dr_ippo.py compensator.py eso.py urls.py
         dgn.py mfq.py
+        qcdr.py dfp.py pmpg.py doraemon.py wisdom.py m3w.py
 scripts/
     lcpo.py happo.py ernie.py rippo.py rma.py liam.py oracle_ippo.py
     dr_ippo.py eso.py urls.py mfq.py dgn.py
+    qcdr.py dfp.py pmpg.py doraemon.py wisdom.py m3w.py
     sweep/run_baselines.sh  run_baselines_sigma0.sh  run_baselines_sigma3.sh
 config/algo_config/<name>/config1.json      one per baseline, sourced in `desc`
 docs/baselines/CHECKLIST_<name>.md          one per baseline
