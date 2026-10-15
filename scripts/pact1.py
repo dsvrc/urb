@@ -85,6 +85,7 @@ if not hasattr(_pact1_pkg, "__path__"):
 from pact1.basis import RouteBasis, load_route_table, parse_sumo_net
 from pact1.coordinator import Pact1Coordinator
 from pact1.policy import Pact1PPO, check_shift_parity
+from pact1.policy_iql import Pact1DQN
 from pact1.records import RecordSource, split_records
 
 ALGORITHM = "pact1"
@@ -160,6 +161,12 @@ def main():
                              "raise it if mutation needs more history)")
     parser.add_argument('--arm', type=str, default=None,
                         choices=["pact1", "blind", "fixed"])
+    parser.add_argument('--host', type=str, default="ppo", choices=["ppo", "iql"],
+                        help="which URB learner PACT-1 wraps. 'iql' steers "
+                             "standardised Q-values before the argmax and needs "
+                             "--arm fixed or blind (no policy gradient to learn "
+                             "trust with). Hyperparameters then come from the "
+                             "'iql' block of the algo config.")
     parser.add_argument('--paths-csv', type=str, default=None,
                         help="explicit path to RouteRL's route table, if the "
                              "automatic search does not find it")
@@ -424,14 +431,37 @@ def main():
     print(f"[PACT-1] observation {obs_size} + {coord.obs_aug_dim} augmented "
           f"= {aug_size}", flush=True)
 
-    for a in env.machine_agents:
-        a.model = Pact1PPO(
-            aug_size, int(a.action_space_size), Network, coord, _aid(a.id),
-            device=device, batch_size=batch_size, lr=lr,                # noqa: F821
-            num_epochs=num_epochs, num_hidden=num_hidden, widths=widths,  # noqa: F821
-            clip_eps=clip_eps, normalize_advantage=normalize_advantage,   # noqa: F821
-            entropy_coef=entropy_coef,                                    # noqa: F821
-        )
+    if args.host == "iql":
+        # The value-based host reads its own hyperparameters, so a PACT-on-IQL run
+        # is URB's IQL plus the steering and nothing else. Defaults mirror
+        # config/algo_config/iql/config1.json.
+        iqlp = dict(params.get("iql", {}))
+        print(f"[PACT-1] host = IQL (steering applied to standardised Q-values); "
+              f"hyperparameters {iqlp or 'defaults'}", flush=True)
+        for a in env.machine_agents:
+            a.model = Pact1DQN(
+                aug_size, int(a.action_space_size), Network, coord, _aid(a.id),
+                device=device,
+                eps_init=iqlp.get("eps_init", 1.0),
+                eps_decay=iqlp.get("eps_decay", 0.9985),
+                eps_min=iqlp.get("eps_min", 0.0),
+                buffer_size=iqlp.get("buffer_size", 2048),
+                batch_size=iqlp.get("batch_size", 32),
+                lr=iqlp.get("lr", 0.001),
+                num_epochs=iqlp.get("num_epochs", 1),
+                num_hidden=iqlp.get("num_hidden", 1),
+                widths=iqlp.get("widths", [64, 64]),
+                kappa=float(pact_cfg.get("kappa", 1.0)),
+            )
+    else:
+        for a in env.machine_agents:
+            a.model = Pact1PPO(
+                aug_size, int(a.action_space_size), Network, coord, _aid(a.id),
+                device=device, batch_size=batch_size, lr=lr,                # noqa: F821
+                num_epochs=num_epochs, num_hidden=num_hidden, widths=widths,  # noqa: F821
+                clip_eps=clip_eps, normalize_advantage=normalize_advantage,   # noqa: F821
+                entropy_coef=entropy_coef,                                    # noqa: F821
+            )
     agent_lookup = {_aid(a.id): a for a in env.machine_agents}
 
     # ---------------------------------------------------------------- loop

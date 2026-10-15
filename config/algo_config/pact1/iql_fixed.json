@@ -1,0 +1,72 @@
+{
+    "desc": [
+        "PACT-1 wrapping URB's IQL instead of its PPO (--host iql).",
+        "The 'iql' block below is config/algo_config/iql/config1.json verbatim,",
+        "so this run is URB's IQL plus the steering and nothing else.",
+        "trust_mode 'fixed': steering on, trust fixed at 0.90.",
+        "learned trust is unavailable on this host: argmax over Q has no policy",
+        "gradient to reach the trust head."
+    ],
+    "training_eps": 4000,
+    "batch_size": 64,
+    "update_every": 1,
+    "lr": 0.0003,
+    "num_epochs": 3,
+    "num_hidden": 1,
+    "widths": [
+        64,
+        64
+    ],
+    "clip_eps": 0.2,
+    "normalize_advantage": true,
+    "entropy_coef": 0.01,
+    "pact1": {
+        "rho": 0.8,
+        "forget": 0.999,
+        "p0": 10.0,
+        "g_max": 1.0,
+        "g_bias": 2.2,
+        "g_ema": 0.9,
+        "kappa": 1.0,
+        "confidence_gate": true,
+        "conf_mode": "pred",
+        "trust_mode": "fixed",
+        "trust_fixed": 0.9,
+        "peer_scope": "all",
+        "dur_factor": 1.0,
+        "overlap_slack": 0.0,
+        "speed_bounds": [
+            8.5,
+            14.0
+        ],
+        "min_class_share": 0.03,
+        "min_channel_var": 0.001,
+        "drop_channels": [],
+        "y_clip": 10.0,
+        "freeze_beta": null,
+        "raw_feature_obs": false,
+        "gate_abort": true,
+        "gate_after_episodes": 300,
+        "gate_min_fit_gain": 0.01,
+        "gate_window": 50,
+        "gate_live_after_episodes": 20,
+        "gate_cond_warn": 1000000.0,
+        "fft_rtol": 0.001,
+        "max_basis_mb": 4000.0,
+        "print_every": 25
+    },
+    "iql": {
+        "eps_init": 1.0,
+        "eps_decay": 0.9985,
+        "eps_min": 0.0,
+        "buffer_size": 2048,
+        "batch_size": 32,
+        "lr": 0.001,
+        "num_epochs": 1,
+        "num_hidden": 1,
+        "widths": [
+            64,
+            64
+        ]
+    }
+}
